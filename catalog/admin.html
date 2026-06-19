@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Electronic Lab Notebook</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            opacity: 0.9;
+        }
+
+        .nav-links {
+            margin-top: 1rem;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin-right: 1.5rem;
+            opacity: 0.9;
+            transition: opacity 0.2s;
+        }
+
+        .nav-links a:hover {
+            opacity: 1;
+            text-decoration: underline;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .tab {
+            padding: 1rem 2rem;
+            background: white;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #666;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: #667eea;
+            background: #f9f9f9;
+        }
+
+        .tab.active {
+            color: #667eea;
+            background: white;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .form-section {
+            margin-bottom: 1.75rem;
+            padding-bottom: 1.75rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .form-section:last-of-type {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .form-section-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 700;
+            color: #8a8fa3;
+            margin-bottom: 1rem;
+        }
+
+        .form-section .form-grid {
+            margin-bottom: 0;
+        }
+
+        .form-section > textarea {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #555;
+            font-size: 0.9rem;
+        }
+
+        input, select, textarea {
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        textarea.large {
+            min-height: 300px;
+        }
+
+        .button {
+            padding: 0.75rem 1.5rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .button:hover {
+            background: #5568d3;
+        }
+
+        .button.secondary {
+            background: #6c757d;
+        }
+
+        .button.secondary:hover {
+            background: #5a6268;
+        }
+
+        .button.danger {
+            background: #dc3545;
+        }
+
+        .button.danger:hover {
+            background: #c82333;
+        }
+
+        .button.success {
+            background: #28a745;
+        }
+
+        .button.success:hover {
+            background: #218838;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .list-container {
+            margin-top: 2rem;
+        }
+
+        .list-item {
+            background: #f9f9f9;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .list-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .list-item-content {
+            flex: 1;
+        }
+
+        .list-item-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .list-item-meta {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .list-item-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-small {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: #667eea;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .modal-body {
+            margin-bottom: 1.5rem;
+        }
+
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .badge.latest {
+            background: #28a745;
+            color: white;
+        }
+
+        .badge.version {
+            background: #6c757d;
+            color: white;
+        }
+
+        .badge.excluded {
+            background: #dc3545;
+            color: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f9f9f9;
+            font-weight: 600;
+            color: #555;
+        }
+
+        tr:hover {
+            background: #f5f5f5;
+        }
+
+        .search-box {
+            margin-bottom: 1.5rem;
+        }
+
+        .search-box input {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .protocol-checkboxes {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 0.75rem;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f9f9f9;
+        }
+
+        .channel-rows {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 0.75rem;
+            background: #f9f9f9;
+        }
+
+        .channel-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.35rem 0;
+        }
+
+        .channel-row .channel-name {
+            flex: 0 0 90px;
+            font-weight: 600;
+            color: #444;
+        }
+
+        .channel-row .channel-target,
+        .channel-row .channel-modality {
+            flex: 1 1 auto;
+            margin: 0;
+        }
+
+        .protocol-checkbox-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            margin-bottom: 0.25rem;
+            background: white;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .protocol-checkbox-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .protocol-checkbox-item input[type="checkbox"] {
+            margin-right: 0.5rem;
+            width: auto;
+        }
+
+        .protocol-checkbox-item label {
+            margin: 0;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .tag-input {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 0.5rem;
+            background: white;
+        }
+
+        .tag-input input {
+            flex: 1;
+            min-width: 8rem;
+            border: none;
+            outline: none;
+            padding: 0.25rem;
+        }
+
+        .tag-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border-radius: 999px;
+            background: #e5edf4;
+            color: #2b5878;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 0.15rem 0.6rem;
+        }
+
+        .tag-chip button {
+            border: none;
+            background: none;
+            color: #2b5878;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="main-content">
+        <div class="header">
+            <h1>Admin Panel</h1>
+            <p>Manage experiments, protocols, and progress reports</p>
+            <div class="nav-links">
+                <a href="/">Data Graph</a>
+                <a href="experiments.html">View Experiments</a>
+                <a href="protocols.html">View Protocols</a>
+                <a href="reports.html">View Reports</a>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="alert" id="main-alert"></div>
+
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-experiments">-</div>
+                    <div class="stat-label">Experiments</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-protocols">-</div>
+                    <div class="stat-label">Protocols</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-reports">-</div>
+                    <div class="stat-label">Reports</div>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('experiments')">Experiments</button>
+                <button class="tab" onclick="switchTab('protocols')">Protocols</button>
+                <button class="tab" onclick="switchTab('reports')">Progress Reports</button>
+            </div>
+
+            <!-- Experiments Tab -->
+            <div id="tab-experiments" class="tab-content active">
+                <h2>Manage Experiments</h2>
+
+                <form id="experiment-form">
+                    <input type="hidden" id="exp-id" />
+
+                    <!-- Datalists for autocomplete -->
+                    <datalist id="exp-types-list"></datalist>
+                    <datalist id="cell-types-list"></datalist>
+                    <datalist id="microscopes-list"></datalist>
+                    <datalist id="tags-list"></datalist>
+                    <datalist id="live-fixed-list">
+                        <option value="Live">
+                        <option value="Fixed">
+                        <option value="Both">
+                    </datalist>
+
+                    <!-- Details: short single-line fields, aligned in one grid -->
+                    <div class="form-section">
+                        <h3 class="form-section-title">Details</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="exp-type">Title *</label>
+                                <input type="text" id="exp-type" list="exp-types-list" placeholder="e.g., spheroid imaging" required />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="exp-code">Code</label>
+                                <input type="text" id="exp-code" maxlength="5" placeholder="5 chars, e.g. SPHIM or TFM01"
+                                       autocomplete="off" pattern="[A-Za-z0-9]{5}" style="text-transform:uppercase" />
+                                <small id="exp-code-hint" style="color:#6a7884;">Auto-filled for known titles; set a new 5-character code (letters or digits) for a new title.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="exp-rep">Repetition</label>
+                                <input type="text" id="exp-rep" maxlength="3" placeholder="e.g., 1, 03, X3, x03"
+                                       pattern="[A-Za-z0-9]{1,3}" />
+                                <small style="color:#6a7884;">Optional X prefix marks excluded (X3, x03). Leave empty for next free.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="exp-microscope">Microscope</label>
+                                <input type="text" id="exp-microscope" list="microscopes-list" placeholder="e.g., Nikon TiE2 Spinning Disk CSU" />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="exp-live-fixed">Live or Fixed</label>
+                                <input type="text" id="exp-live-fixed" list="live-fixed-list" placeholder="Live, Fixed, or Both" />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="exp-thumbnail">Thumbnail Path</label>
+                                <input type="text" id="exp-thumbnail" placeholder="/path/to/thumbnail.png" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cell types & tags: two tag-inputs of equal height side by side -->
+                    <div class="form-section">
+                        <h3 class="form-section-title">Cell Types &amp; Tags</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="exp-cell-type-input">Cell Types</label>
+                                <div class="tag-input" id="exp-cell-types">
+                                    <input type="text" id="exp-cell-type-input" list="cell-types-list"
+                                           placeholder="Type a cell type and press Enter" autocomplete="off" />
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="exp-tag-input">Tags</label>
+                                <div class="tag-input" id="exp-tags">
+                                    <input type="text" id="exp-tag-input" list="tags-list"
+                                           placeholder="Type a tag and press Enter" autocomplete="off" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Protocols -->
+                    <div class="form-section">
+                        <h3 class="form-section-title">Protocols</h3>
+                        <div id="exp-protocols" class="protocol-checkboxes">
+                            <!-- Protocols will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Microscopy channels -->
+                    <div class="form-section">
+                        <h3 class="form-section-title">Microscopy Channels</h3>
+                        <div id="exp-channels" class="channel-rows">
+                            <div class="channel-row" data-label="Blue" data-type="fluorescence">
+                                <span class="channel-name">Blue</span>
+                                <input type="text" class="channel-target" placeholder="target / marker (e.g. DAPI, nucleus) — leave empty if unused" />
+                            </div>
+                            <div class="channel-row" data-label="Green" data-type="fluorescence">
+                                <span class="channel-name">Green</span>
+                                <input type="text" class="channel-target" placeholder="target / marker (e.g. Phalloidin, F-actin) — leave empty if unused" />
+                            </div>
+                            <div class="channel-row" data-label="Red" data-type="fluorescence">
+                                <span class="channel-name">Red</span>
+                                <input type="text" class="channel-target" placeholder="target / marker (e.g. vinculin) — leave empty if unused" />
+                            </div>
+                            <div class="channel-row" data-label="Far-red" data-type="fluorescence">
+                                <span class="channel-name">Far-red</span>
+                                <input type="text" class="channel-target" placeholder="target / marker — leave empty if unused" />
+                            </div>
+                            <div class="channel-row" data-label="Brightfield" data-type="brightfield">
+                                <span class="channel-name">Brightfield</span>
+                                <select class="channel-modality">
+                                    <option value="">— not used —</option>
+                                    <option value="Standard">Standard</option>
+                                    <option value="Phase contrast">Phase contrast</option>
+                                    <option value="DIC">DIC</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Comments -->
+                    <div class="form-section">
+                        <h3 class="form-section-title">Comments / Notes</h3>
+                        <textarea id="exp-comments" aria-label="Comments / Notes" placeholder="Experiment details, observations, notes..."></textarea>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="button">Save Experiment</button>
+                        <button type="button" class="button secondary" onclick="resetExperimentForm()">Clear Form</button>
+                        <button type="button" class="button success" onclick="regenerateCatalogs()">Regenerate Catalogs</button>
+                    </div>
+                </form>
+
+                <div class="list-container">
+                    <h3>Existing Experiments</h3>
+                    <div class="search-box">
+                        <input type="text" id="exp-search" placeholder="Search experiments..." onkeyup="filterExperiments()" />
+                    </div>
+                    <div class="loading" id="exp-loading">
+                        <div class="spinner"></div>
+                        <p>Loading experiments...</p>
+                    </div>
+                    <div id="experiments-list"></div>
+                </div>
+            </div>
+
+            <!-- Protocols Tab -->
+            <div id="tab-protocols" class="tab-content">
+                <h2>Manage Protocols</h2>
+
+                <form id="protocol-form">
+                    <input type="hidden" id="proto-id" />
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="proto-name">Protocol Name *</label>
+                            <input type="text" id="proto-name" required placeholder="e.g., Spheroid Culture Protocol" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="proto-version">Version *</label>
+                            <input type="text" id="proto-version" required placeholder="e.g., 1.0, 2.1" />
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="proto-description">Description</label>
+                            <textarea id="proto-description" placeholder="Brief description of the protocol..."></textarea>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="proto-content">Protocol Content (Markdown) *</label>
+                            <textarea id="proto-content" class="large" required placeholder="# Protocol Steps&#10;&#10;## Materials&#10;- Item 1&#10;- Item 2&#10;&#10;## Procedure&#10;1. Step 1&#10;2. Step 2"></textarea>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="proto-file-path">File Path (optional)</label>
+                            <input type="text" id="proto-file-path" placeholder="/path/to/protocol.md" />
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="button">Save Protocol</button>
+                        <button type="button" class="button secondary" onclick="resetProtocolForm()">Clear Form</button>
+                        <button type="button" class="button success" onclick="regenerateCatalogs()">Regenerate Catalogs</button>
+                    </div>
+                </form>
+
+                <div class="list-container">
+                    <h3>Existing Protocols</h3>
+                    <div class="loading" id="proto-loading">
+                        <div class="spinner"></div>
+                        <p>Loading protocols...</p>
+                    </div>
+                    <div id="protocols-list"></div>
+                </div>
+            </div>
+
+            <!-- Reports Tab -->
+            <div id="tab-reports" class="tab-content">
+                <h2>Manage Progress Reports</h2>
+
+                <form id="report-form">
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label for="report-filename">Filename *</label>
+                            <input type="text" id="report-filename" required placeholder="e.g., 2025-10-week-43.md" />
+                            <small style="color: #666; margin-top: 0.25rem;">Must end with .md</small>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="report-content">Report Content (Markdown) *</label>
+                            <textarea id="report-content" class="large" required placeholder="# Progress Report&#10;&#10;**Date:** 2025-10-26&#10;**Author:** Your Name&#10;&#10;## Summary&#10;&#10;This week's progress..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="button">Save Report</button>
+                        <button type="button" class="button secondary" onclick="resetReportForm()">Clear Form</button>
+                        <button type="button" class="button success" onclick="regenerateCatalogs()">Regenerate Catalogs</button>
+                    </div>
+                </form>
+
+                <div class="list-container">
+                    <h3>Existing Reports</h3>
+                    <div class="loading" id="report-loading">
+                        <div class="spinner"></div>
+                        <p>Loading reports...</p>
+                    </div>
+                    <div id="reports-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>

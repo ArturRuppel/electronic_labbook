@@ -5,6 +5,7 @@ and the SDGL design spec.
 """
 
 from .engine import (
+    CODE_RE,
     SDGL,
     allocate_experiment_codes,
     allocate_experiment_uids,
@@ -17,6 +18,7 @@ from .engine import (
 )
 
 __all__ = [
+    "CODE_RE",
     "SDGL",
     "allocate_experiment_codes",
     "allocate_experiment_uids",

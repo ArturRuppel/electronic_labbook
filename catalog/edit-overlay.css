@@ -1,0 +1,133 @@
+/* Edit overlay - injected by Flask for local editing */
+
+/* Fixed bottom toolbar */
+.eln-toolbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 0.75rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    z-index: 9999;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.eln-toolbar-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    opacity: 0.9;
+    margin-right: 0.5rem;
+    white-space: nowrap;
+}
+
+.eln-toolbar-btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    white-space: nowrap;
+    text-decoration: none;
+    display: inline-block;
+    line-height: 1.4;
+}
+
+.eln-toolbar-btn:hover {
+    transform: translateY(-1px);
+}
+
+.eln-toolbar-btn:active {
+    transform: translateY(0);
+}
+
+.eln-toolbar-btn.add {
+    background: rgba(255,255,255,0.2);
+    color: white;
+}
+
+.eln-toolbar-btn.add:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.eln-toolbar-btn.publish {
+    background: #28a745;
+    color: white;
+    margin-left: auto;
+}
+
+.eln-toolbar-btn.publish:hover {
+    background: #218838;
+}
+
+.eln-toolbar-btn.publish:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Inline edit buttons */
+.eln-edit-btn {
+    padding: 0.3rem 0.7rem;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: background 0.2s;
+    vertical-align: middle;
+}
+
+.eln-edit-btn:hover {
+    background: #5568d3;
+    color: white;
+}
+
+/* Add padding at page bottom so toolbar doesn't cover content */
+body.eln-editing {
+    padding-bottom: 60px;
+}
+
+/* Publish status toast */
+.eln-toast {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    font-size: 0.9rem;
+    z-index: 10000;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.3s, transform 0.3s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.eln-toast.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.eln-toast.success {
+    background: #28a745;
+}
+
+.eln-toast.error {
+    background: #dc3545;
+}
+
+.eln-toast.info {
+    background: #667eea;
+}

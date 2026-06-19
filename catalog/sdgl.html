@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDGL - Electronic Lab Notebook</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #27313a;
+            background: #eef1f4;
+        }
+        .header { background: #263646; color: white; padding: 1.25rem 1.5rem; }
+        .header h1 { font-size: 1.55rem; line-height: 1.2; }
+        .header p { margin-top: 0.25rem; color: #d7e0e7; }
+        .nav {
+            display: flex; flex-wrap: wrap; gap: 1rem; background: white;
+            padding: 0.8rem 1.5rem; border-bottom: 1px solid #d7dde2;
+        }
+        .nav a { color: #286b9f; font-weight: 650; text-decoration: none; }
+        .shell {
+            display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 1rem;
+            min-height: calc(100vh - 134px); padding: 1rem;
+        }
+        .panel { background: white; border: 1px solid #d7dde2; border-radius: 8px; min-width: 0; }
+        .toolbar {
+            display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+            gap: 0.75rem; padding: 0.75rem; border-bottom: 1px solid #d7dde2;
+        }
+        .tabs { display: flex; gap: 0.35rem; }
+        button {
+            border: 1px solid #b8c3cc; border-radius: 6px; background: #f7f9fa; color: #24313d;
+            cursor: pointer; font: inherit; font-weight: 650; min-height: 2.1rem; padding: 0.4rem 0.75rem;
+        }
+        button:hover { background: #e9eef2; }
+        button.active { border-color: #2d6f9f; background: #2d6f9f; color: white; }
+        button.primary { border-color: #27735f; background: #2d806a; color: white; }
+        input[type="search"] {
+            width: min(100%, 22rem); border: 1px solid #b8c3cc; border-radius: 6px;
+            padding: 0.5rem 0.65rem; font: inherit;
+        }
+        .view { display: none; height: calc(100vh - 203px); min-height: 520px; overflow: auto; }
+        .view.active { display: block; }
+
+        /* Explorer tree */
+        #tree { padding: 0.4rem 0.25rem; }
+        .row {
+            display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem;
+            border-radius: 6px; cursor: pointer; user-select: none;
+        }
+        .row:hover { background: #f1f5f8; }
+        .row.selected { background: #e3eef6; outline: 1px solid #9cc1dd; }
+        .row.dimmed { opacity: 0.32; }
+        .twisty {
+            flex: 0 0 1.1rem; text-align: center; color: #6a7884; font-size: 0.8rem;
+            transition: transform 0.12s ease;
+        }
+        .twisty.spacer { visibility: hidden; }
+        .row.open > .twisty { transform: rotate(90deg); }
+        .dot { flex: 0 0 0.6rem; width: 0.6rem; height: 0.6rem; border-radius: 50%; }
+        .row-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .row-id {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: #2b5878; font-weight: 700;
+        }
+        .row-meta { color: #6a7884; font-weight: 400; font-size: 0.85rem; }
+        .badge {
+            margin-left: auto; flex: 0 0 auto; background: #e5edf4; color: #2b5878;
+            border-radius: 999px; font-size: 0.75rem; font-weight: 700; padding: 0.05rem 0.45rem;
+        }
+        .badge.warn { background: #f6e7c8; color: #8a6320; }
+        .badge.muted { background: #eceff2; color: #6a7884; }
+        .children { margin-left: 1.1rem; border-left: 1px solid #e6ebef; padding-left: 0.25rem; }
+        .hidden { display: none; }
+        .tag-chip {
+            display: inline-block; border-radius: 999px; background: #e5edf4; color: #2b5878;
+            font-size: 0.72rem; font-weight: 600; padding: 0.02rem 0.45rem; margin-left: 0.25rem;
+        }
+        .entry-icon { flex: 0 0 1rem; text-align: center; }
+
+        /* Curation */
+        .table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+        .table th, .table td { border-bottom: 1px solid #e0e5e9; padding: 0.65rem; text-align: left; vertical-align: top; }
+        .table th { background: #f3f6f8; color: #53616d; font-size: 0.8rem; text-transform: uppercase; }
+        .type-pill {
+            display: inline-block; border-radius: 999px; background: #e5edf4; color: #2b5878;
+            font-size: 0.8rem; font-weight: 700; padding: 0.15rem 0.55rem;
+        }
+
+        /* Detail */
+        .detail { padding: 1rem; overflow: auto; max-height: calc(100vh - 134px); }
+        .detail h2 { font-size: 1.2rem; margin-bottom: 0.35rem; overflow-wrap: anywhere; }
+        .detail-section { margin-top: 1rem; }
+        .detail-section h3 { color: #53616d; font-size: 0.82rem; margin-bottom: 0.5rem; text-transform: uppercase; }
+        .kv { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: 0.35rem 0.6rem; font-size: 0.92rem; }
+        .kv dt { color: #667582; font-weight: 650; }
+        .kv dd { min-width: 0; overflow-wrap: anywhere; }
+        .list { display: grid; gap: 0.5rem; }
+        .list-item { border: 1px solid #d7dde2; border-radius: 6px; padding: 0.6rem; overflow-wrap: anywhere; }
+        .list-item.stale { border-color: #e0c187; background: #fdf7ec; }
+        .muted { color: #6a7884; }
+        .empty { color: #6a7884; padding: 1rem; }
+        .status { color: #53616d; font-size: 0.9rem; padding: 1rem; }
+        a.xlink { color: #286b9f; font-weight: 650; text-decoration: none; }
+        @media (max-width: 980px) {
+            .shell { grid-template-columns: 1fr; }
+            .view { height: 60vh; }
+            .detail { max-height: none; }
+        }
+    </style>
+</head>
+<body>
+    <script src="auth.js"></script>
+    <header class="header">
+        <h1>Scientific Data Graph Layer</h1>
+        <p>Experiments &rarr; repetitions &rarr; data files and linked entities</p>
+    </header>
+    <nav class="nav">
+        <a href="/">Data Graph</a>
+        <a href="experiments.html">Experiments</a>
+        <a href="protocols.html">Protocols</a>
+        <a href="reports.html">Reports</a>
+        <a href="presentations.html">Presentations</a>
+    </nav>
+    <main class="shell">
+        <section class="panel">
+            <div class="toolbar">
+                <div class="tabs">
+                    <button id="tab-explorer" class="active" data-view="explorer-view">Explorer</button>
+                    <button id="tab-curation" data-view="curation-view">Curation</button>
+                </div>
+                <input id="search" type="search" placeholder="Search title or tags">
+            </div>
+            <div id="explorer-view" class="view active">
+                <div id="tree"></div>
+            </div>
+            <div id="curation-view" class="view">
+                <table class="table">
+                    <thead>
+                        <tr><th>Status</th><th>Root</th><th>Path</th><th>Suggestion</th></tr>
+                    </thead>
+                    <tbody id="curation-table"></tbody>
+                </table>
+            </div>
+        </section>
+        <aside class="panel detail" id="detail">
+            <p class="empty">Select an experiment, repetition, or file.</p>
+        </aside>
+    </main>
+    <script>
+        const API = '/api/sdgl';
+        const TYPE_COLORS = {
+            experiment: '#2d6f9f', protocol: '#7f5f2f', report: '#5d7290',
+            presentation: '#8a6db1', dir: '#6b7b35', file: '#9aa6b0',
+            aggregate_analysis: '#2f8f7f'
+        };
+
+        let treeData = {experiments: []};
+        let selectedKey = null;
+
+        document.querySelectorAll('.tabs button').forEach(button => {
+            button.addEventListener('click', () => showView(button.dataset.view));
+        });
+        document.getElementById('search').addEventListener('input', applyFilter);
+
+        loadAll();
+
+        async function loadAll() {
+            const [tree, findings] = await Promise.all([
+                fetch(`${API}/tree`).then(r => r.json()),
+                fetch(`${API}/scan/unmatched`).then(r => r.json())
+            ]);
+            treeData = tree;
+            renderTree();
+            renderCuration(findings);
+        }
+
+        function showView(viewId) {
+            document.querySelectorAll('.tabs button').forEach(button => {
+                button.classList.toggle('active', button.dataset.view === viewId);
+            });
+            document.querySelectorAll('.view').forEach(view => {
+                view.classList.toggle('active', view.id === viewId);
+            });
+        }
+
+        // ---- Tree rendering -------------------------------------------------
+
+        function renderTree() {
+            const host = document.getElementById('tree');
+            host.innerHTML = '';
+            if (!treeData.experiments.length) {
+                host.innerHTML = '<p class="empty">No experiments yet.</p>';
+                return;
+            }
+            treeData.experiments.forEach((exp, index) => {
+                host.appendChild(experimentBlock(exp, index));
+            });
+            applyFilter();
+        }
+
+        function makeRow({twisty, color, icon, label, meta, badge, badgeClass}) {
+            const row = document.createElement('div');
+            row.className = 'row';
+            const tw = document.createElement('span');
+            tw.className = 'twisty' + (twisty ? '' : ' spacer');
+            tw.textContent = '▶';
+            row.appendChild(tw);
+            if (color) {
+                const dot = document.createElement('span');
+                dot.className = 'dot';
+                dot.style.background = color;
+                row.appendChild(dot);
+            }
+            if (icon) {
+                const ic = document.createElement('span');
+                ic.className = 'entry-icon';
+                ic.textContent = icon;
+                row.appendChild(ic);
+            }
+            const lab = document.createElement('span');
+            lab.className = 'row-label';
+            lab.innerHTML = label + (meta ? ` <span class="row-meta">${meta}</span>` : '');
+            row.appendChild(lab);
+            if (badge != null) {
+                const b = document.createElement('span');
+                b.className = 'badge' + (badgeClass ? ' ' + badgeClass : '');
+                b.textContent = badge;
+                row.appendChild(b);
+            }
+            return row;
+        }
+
+        // Wire a row + its lazily-built children container into a collapsible block.
+        function collapsible(row, buildChildren) {
+            const wrap = document.createElement('div');
+            const children = document.createElement('div');
+            children.className = 'children hidden';
+            let built = false;
+            row.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const opening = children.classList.contains('hidden');
+                if (opening && !built) { buildChildren(children); built = true; }
+                children.classList.toggle('hidden');
+                row.classList.toggle('open', opening);
+            });
+            wrap.appendChild(row);
+            wrap.appendChild(children);
+            return wrap;
+        }
+
+        function experimentBlock(exp, index) {
+            const tags = (exp.tags || []).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('');
+            const label = `<span class="row-id">${escapeHtml(exp.code || '')}</span> ${escapeHtml(exp.title || '(untitled)')}${tags}`;
+            const row = makeRow({
+                twisty: true, color: TYPE_COLORS.experiment, label,
+                badge: `${exp.repetition_count} rep${exp.repetition_count === 1 ? '' : 's'}`
+            });
+            row.dataset.search = `${exp.code} ${exp.title} ${(exp.tags || []).join(' ')}`.toLowerCase();
+            row.addEventListener('click', () => select(`exp:${index}`, row, () => detailExperiment(exp)), true);
+            const block = collapsible(row, (container) => {
+                if (exp.aggregate) {
+                    container.appendChild(aggregateBlock(exp, exp.aggregate, `${index}.agg`));
+                }
+                exp.repetitions.forEach((rep, repIndex) => {
+                    container.appendChild(repetitionBlock(exp, rep, `${index}.${repIndex}`));
+                });
+            });
+            block.dataset.expRow = '1';
+            return block;
+        }
+
+        function aggregateBlock(exp, aggregate, key) {
+            const meta = aggregate.oldest_mtime ? `oldest ${formatMtime(aggregate.oldest_mtime)}` : '';
+            const fileCount = countFiles(aggregate.files);
+            const row = makeRow({
+                twisty: true, color: TYPE_COLORS.aggregate_analysis || TYPE_COLORS.experiment,
+                label: `<span class="row-id">Aggregate</span> <span class="muted">full experiment</span>`,
+                meta, badge: fileCount ? `${fileCount} item${fileCount === 1 ? '' : 's'}` : null,
+                badgeClass: 'muted'
+            });
+            return collapsible(row, (container) => {
+                if (!aggregate.files.length && !(aggregate.links || []).length) {
+                    const none = document.createElement('div');
+                    none.className = 'row-meta';
+                    none.style.padding = '0.35rem 0.6rem';
+                    none.textContent = 'No scanned data or linked entities yet.';
+                    container.appendChild(none);
+                }
+                aggregate.files.forEach((entry, i) => container.appendChild(fileNode(entry, `${key}.f${i}`)));
+                (aggregate.links || []).forEach((link, i) => container.appendChild(linkRow(link, `${key}.l${i}`)));
+            });
+        }
+
+        function repetitionBlock(exp, rep, key) {
+            const meta = [rep.date, rep.oldest_mtime ? `oldest ${formatMtime(rep.oldest_mtime)}` : '']
+                .filter(Boolean).join(' · ');
+            const fileCount = countFiles(rep.files);
+            const row = makeRow({
+                twisty: true, color: TYPE_COLORS.experiment,
+                label: `<span class="row-id">${escapeHtml(rep.id)}</span>`,
+                meta, badge: fileCount ? `${fileCount} item${fileCount === 1 ? '' : 's'}` : null,
+                badgeClass: 'muted'
+            });
+            row.addEventListener('click', () => select(`rep:${key}`, row, () => detailRepetition(exp, rep)), true);
+            return collapsible(row, (container) => {
+                if (!rep.files.length && !rep.links.length) {
+                    const none = document.createElement('div');
+                    none.className = 'row-meta';
+                    none.style.padding = '0.35rem 0.6rem';
+                    none.textContent = 'No scanned data or linked entities yet.';
+                    container.appendChild(none);
+                }
+                rep.files.forEach((entry, i) => container.appendChild(fileNode(entry, `${key}.f${i}`)));
+                rep.links.forEach((link, i) => container.appendChild(linkRow(link, `${key}.l${i}`)));
+            });
+        }
+
+        function fileNode(entry, key) {
+            const icon = entry.is_dir ? '📁' : '📄';
+            let badge = null, badgeClass = '';
+            if (entry.stale_count) { badge = `${entry.stale_count} stale`; badgeClass = 'warn'; }
+            else if ((entry.locations || []).length > 1) { badge = `${entry.locations.length}×`; badgeClass = 'muted'; }
+            const meta = entry.is_dir ? '' : formatBytes(entry.size);
+            const row = makeRow({
+                twisty: entry.is_dir, icon, label: escapeHtml(entry.name),
+                meta, badge, badgeClass
+            });
+            row.addEventListener('click', () => select(`file:${key}`, row, () => detailFile(entry)), true);
+            if (!entry.is_dir) return wrapLeaf(row);
+            const block = collapsible(row, (container) => {
+                (entry.children || []).forEach((child, i) => container.appendChild(fileNode(child, `${key}.${i}`)));
+            });
+            // raw/ subtrees stay collapsed by default (assumed immutable bulk data).
+            return block;
+        }
+
+        function linkRow(link, key) {
+            // Reports get special treatment - show with document icon and direct link
+            if (link.type === 'report') {
+                const row = makeRow({
+                    twisty: false, color: '#2b7a5f', icon: '📄',
+                    label: `${escapeHtml(link.title || link.node_id)}`,
+                    meta: `report · ${link.relation}`
+                });
+                // Click opens the report in reports.html
+                row.addEventListener('click', () => {
+                    window.open(`reports.html#${(link.node_id || '').split(':', 2)[1]}`, '_blank');
+                }, true);
+                return wrapLeaf(row);
+            }
+            
+            // Default link handling for protocols, presentations, etc.
+            const row = makeRow({
+                twisty: false, color: TYPE_COLORS[link.type] || '#6b7780', icon: '🔗',
+                label: `${escapeHtml(link.title || link.node_id)}`,
+                meta: `${link.type} · ${link.relation}`
+            });
+            row.addEventListener('click', () => select(`link:${key}`, row, () => detailLink(link)), true);
+            return wrapLeaf(row);
+        }
+
+        function wrapLeaf(row) {
+            const wrap = document.createElement('div');
+            wrap.appendChild(row);
+            return wrap;
+        }
+
+        function countFiles(entries) {
+            let total = 0;
+            (entries || []).forEach(entry => {
+                total += 1;
+                if (entry.children) total += countFiles(entry.children);
+            });
+            return total;
+        }
+
+        // ---- Selection + detail --------------------------------------------
+
+        function select(key, row, render) {
+            selectedKey = key;
+            document.querySelectorAll('.row.selected').forEach(r => r.classList.remove('selected'));
+            row.classList.add('selected');
+            render();
+        }
+
+        function detailExperiment(exp) {
+            // Experiment group level - show summary and list repetitions
+            const tags = (exp.tags || []).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('') || '<span class="muted">None</span>';
+            const repList = (exp.repetitions || []).map(rep => {
+                const repTags = (rep.tags || []).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('') || '<span class="muted">None</span>';
+                const channels = (rep.channels || []);
+                const channelsList = channels.length > 0
+                    ? channels.map(ch => {
+                        const parts = [];
+                        if (ch.channel_label) parts.push(escapeHtml(ch.channel_label));
+                        if (ch.target) parts.push(escapeHtml(ch.target));
+                        if (ch.modality) parts.push(escapeHtml(ch.modality));
+                        return parts.join(': ');
+                    }).join(', ')
+                    : '<span class="muted">None</span>';
+                
+                return `
+                    <div class="list-item">
+                        <div><strong>${escapeHtml(rep.id)}</strong></div>
+                        <div class="muted">Date: ${escapeHtml(rep.date || '—')}</div>
+                        <div class="muted">Items: ${countFiles(rep.files || [])}</div>
+                        <div style="margin-top: 0.4rem;"><strong>Tags:</strong> ${repTags}</div>
+                        <div><strong>Channels:</strong> ${channelsList}</div>
+                        ${rep.cell_types ? `<div><strong>Cell types:</strong> ${escapeHtml(rep.cell_types)}</div>` : ''}
+                        ${rep.microscope ? `<div><strong>Microscope:</strong> ${escapeHtml(rep.microscope)}</div>` : ''}
+                        ${rep.live_or_fixed ? `<div><strong>Live/Fixed:</strong> ${escapeHtml(rep.live_or_fixed)}</div>` : ''}
+                        ${rep.comments ? `<div><strong>Comments:</strong> ${escapeHtml(rep.comments)}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+            
+            setDetail(`
+                <h2>${escapeHtml(exp.title || '(untitled)')}</h2>
+                <p><span class="type-pill">experiment</span></p>
+                <div class="detail-section">
+                    <h3>Summary</h3>
+                    <dl class="kv">
+                        <dt>Code</dt><dd class="row-id">${escapeHtml(exp.code || '')}</dd>
+                        <dt>Repetitions</dt><dd>${exp.repetition_count}</dd>
+                        <dt>All Tags</dt><dd>${tags}</dd>
+                    </dl>
+                </div>
+                <div class="detail-section">
+                    <h3>Repetitions (with qualifiers)</h3>
+                    <div class="list">${repList || '<p class="muted">No repetitions</p>'}</div>
+                </div>
+            `);
+        }
+
+        function detailRepetition(exp, rep) {
+            const links = rep.links.map(l => `<div class="list-item">${linkHtml(l)}</div>`).join('');
+            setDetail(`
+                <h2><span class="row-id">${escapeHtml(rep.id)}</span></h2>
+                <p>${escapeHtml(exp.title || '')}</p>
+                <div class="detail-section"><dl class="kv">
+                    <dt>Date</dt><dd>${escapeHtml(rep.date || '—')}</dd>
+                    <dt>Oldest file</dt><dd>${rep.oldest_mtime ? formatMtime(rep.oldest_mtime) : '<span class="muted">—</span>'}</dd>
+                    <dt>Items</dt><dd>${countFiles(rep.files)}</dd>
+                </dl></div>
+                <div class="detail-section">
+                    <h3>Linked entities</h3>
+                    <div class="list">${links || '<p class="muted">None</p>'}</div>
+                </div>
+            `);
+        }
+
+        function detailFile(entry) {
+            const locations = (entry.locations || []).map(loc => `
+                <div class="list-item${loc.stale ? ' stale' : ''}">
+                    <div><strong>${escapeHtml(loc.root_name || 'local')}</strong>${loc.stale ? ' <span class="badge warn">stale</span>' : ''}</div>
+                    <div class="muted">${escapeHtml(loc.path)}</div>
+                    <div class="muted">${formatBytes(loc.size)} · ${loc.mtime ? formatMtime(loc.mtime) : '—'}</div>
+                    ${loc.id ? `<button data-open="${escapeHtml(loc.id)}">Open</button>` : ''}
+                </div>
+            `).join('');
+            setDetail(`
+                <h2>${escapeHtml(entry.name)}</h2>
+                <p><span class="type-pill">${entry.is_dir ? 'folder' : 'file'}</span>${entry.in_raw ? ' <span class="badge muted">raw</span>' : ''}</p>
+                <div class="detail-section"><dl class="kv">
+                    <dt>Path</dt><dd>${escapeHtml(entry.rel_path || entry.name)}</dd>
+                    ${entry.is_dir ? '' : `<dt>Size</dt><dd>${formatBytes(entry.size)}</dd>`}
+                    <dt>Modified</dt><dd>${entry.mtime ? formatMtime(entry.mtime) : '—'}</dd>
+                </dl></div>
+                <div class="detail-section">
+                    <h3>Locations (${(entry.locations || []).length})</h3>
+                    <div class="list">${locations || '<p class="muted">None</p>'}</div>
+                </div>
+            `);
+            document.querySelectorAll('button[data-open]').forEach(btn => {
+                btn.addEventListener('click', () => openLocation(btn.dataset.open));
+            });
+        }
+
+        function detailLink(link) {
+            setDetail(`
+                <h2>${escapeHtml(link.title || link.node_id)}</h2>
+                <p><span class="type-pill">${escapeHtml(link.type)}</span></p>
+                <div class="detail-section"><dl class="kv">
+                    <dt>Relation</dt><dd>${escapeHtml(link.relation)}</dd>
+                    <dt>Node</dt><dd>${escapeHtml(link.node_id)}</dd>
+                </dl></div>
+                <div class="detail-section">${linkHtml(link)}</div>
+            `);
+        }
+
+        function linkHtml(link) {
+            const href = catalogHref(link);
+            const label = escapeHtml(link.title || link.node_id);
+            const inner = href ? `<a class="xlink" href="${href}">${label}</a>` : label;
+            return `<div><strong>${inner}</strong></div><div class="muted">${escapeHtml(link.type)} · ${escapeHtml(link.relation)}</div>`;
+        }
+
+        function catalogHref(link) {
+            const id = (link.node_id || '').split(':', 2)[1];
+            if (link.type === 'protocol') return `protocols.html#${id}`;
+            if (link.type === 'report') return 'reports.html';
+            if (link.type === 'presentation') return 'presentations.html';
+            return null;
+        }
+
+        function setDetail(html) { document.getElementById('detail').innerHTML = html; }
+        function showStatus(message) { setDetail(`<p class="status">${escapeHtml(message)}</p>`); }
+
+        async function openLocation(locationId) {
+            await fetch(`${API}/open`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({location_id: locationId})
+            });
+        }
+
+        // ---- Curation + search ---------------------------------------------
+
+        function renderCuration(findings) {
+            const body = document.getElementById('curation-table');
+            body.innerHTML = (findings || []).map(item => `
+                <tr>
+                    <td><span class="type-pill">${escapeHtml(item.status)}</span></td>
+                    <td>${escapeHtml(item.root_name || '')}</td>
+                    <td>${escapeHtml(item.path)}</td>
+                    <td>${escapeHtml(item.suggestion || '')}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="4" class="empty">No unmatched folders</td></tr>';
+        }
+
+        function applyFilter() {
+            const query = document.getElementById('search').value.trim().toLowerCase();
+            document.querySelectorAll('#tree > div[data-exp-row]').forEach(block => {
+                const row = block.querySelector('.row');
+                const hit = !query || (row.dataset.search || '').includes(query);
+                row.classList.toggle('dimmed', !hit);
+            });
+        }
+
+        // ---- Formatting -----------------------------------------------------
+
+        function formatBytes(bytes) {
+            if (bytes == null) return '—';
+            if (bytes < 1024) return `${bytes} B`;
+            const units = ['KB', 'MB', 'GB', 'TB'];
+            let value = bytes / 1024, i = 0;
+            while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+            return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
+        }
+
+        function formatMtime(mtime) {
+            if (!mtime) return '—';
+            const date = new Date(mtime * 1000);
+            if (isNaN(date)) return '—';
+            return date.toISOString().slice(0, 10);
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[char]));
+        }
+    </script>
+</body>
+</html>

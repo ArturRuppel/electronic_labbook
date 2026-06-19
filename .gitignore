@@ -17,6 +17,8 @@ sdgl.toml
 # are negated below so they stay tracked.
 catalog/*.html
 !catalog/home_template.html
+!catalog/admin.html
+!catalog/sdgl.html
 
 # Python
 __pycache__/

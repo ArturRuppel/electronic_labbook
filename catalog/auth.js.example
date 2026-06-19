@@ -1,0 +1,63 @@
+// Optional password gate for a *published* catalog (e.g. GitLab Pages).
+//
+// This is NOT used by the local server: eln.server serves a no-op auth.js so
+// locally edited pages never prompt. It belongs to a deployment, so it ships as
+// an example and the real hash is never committed to the public code repo.
+//
+// To enable: copy this file to your DATA repo as catalog/auth.js, then set
+// PASSWORD_HASH to the SHA-256 hex digest of your password, e.g.:
+//     python -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())" "your_password"
+//
+// Note: client-side protection only — not cryptographically secure. Suitable
+// for trusted users, not for highly sensitive data.
+
+(function () {
+    'use strict';
+
+    // SHA-256 hash of the access password. Replace before deploying.
+    const PASSWORD_HASH = 'REPLACE_WITH_SHA256_OF_YOUR_PASSWORD';
+
+    const SESSION_KEY = 'electronic_labbook_auth';
+
+    function isAuthenticated() {
+        return sessionStorage.getItem(SESSION_KEY) === PASSWORD_HASH;
+    }
+
+    async function hashPassword(password) {
+        const msgBuffer = new TextEncoder().encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function promptPassword() {
+        const password = prompt('Enter password to access the documentation:');
+        if (password === null) {
+            document.body.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; color: #666;"><div style="text-align: center;"><h1>Access Denied</h1><p>You must enter a password to view this page.</p><button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;">Try Again</button></div></div>';
+            return false;
+        }
+        const hash = await hashPassword(password);
+        if (hash === PASSWORD_HASH) {
+            sessionStorage.setItem(SESSION_KEY, hash);
+            return true;
+        }
+        alert('Incorrect password. Please try again.');
+        return promptPassword();
+    }
+
+    async function checkAuth() {
+        if (!isAuthenticated()) {
+            document.body.style.display = 'none';
+            const authenticated = await promptPassword();
+            if (authenticated) {
+                document.body.style.display = '';
+            }
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkAuth);
+    } else {
+        checkAuth();
+    }
+})();
