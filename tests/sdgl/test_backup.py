@@ -5,6 +5,7 @@ from pathlib import Path
 from eln.sdgl import SDGL
 from eln.sdgl.backup import (
     hash_file, dest_subpath, resolve_logical_files, classify, plan_backup,
+    run_backup, BackupJob,
 )
 
 
@@ -175,3 +176,94 @@ def test_plan_backup_reports_missing(tmp_path):
         conn.close()
     assert plan["file_count"] == 0
     assert plan["missing"] == [{"node_id": node_id, "rel_path": "raw/a.tif"}]
+
+
+def test_run_backup_copies_by_code(tmp_path):
+    sdgl, node_id = _sdgl_with_files(tmp_path, [("raw/a.tif", b"aaa"), ("analysis/b.csv", b"bbbb")])
+    dest = tmp_path / "dest"
+    conn = sdgl.connect()
+    try:
+        summary = run_backup(conn, [{"node_id": node_id, "rel_path": ""}], str(dest))
+    finally:
+        conn.close()
+    assert summary["copied"] == 2
+    assert (dest / "TFMSP" / "TFMSP-01" / "raw" / "a.tif").read_bytes() == b"aaa"
+    assert (dest / "TFMSP" / "TFMSP-01" / "analysis" / "b.csv").read_bytes() == b"bbbb"
+
+
+def test_run_backup_skips_missing(tmp_path):
+    sdgl, node_id = _sdgl_with_files(tmp_path, [("raw/a.tif", b"aaa")])
+    dest = tmp_path / "dest"
+    conn = sdgl.connect()
+    try:
+        Path(conn.execute("SELECT path FROM file_locations LIMIT 1").fetchone()["path"]).unlink()
+        summary = run_backup(conn, [{"node_id": node_id, "rel_path": ""}], str(dest))
+    finally:
+        conn.close()
+    assert summary["copied"] == 0
+    assert summary["skipped"] == [{"node_id": node_id, "rel_path": "raw/a.tif", "reason": "missing on disk"}]
+
+
+def test_run_backup_applies_conflict_resolution(tmp_path):
+    sdgl, node_id = _sdgl_with_files(tmp_path, [("raw/a.tif", b"version-one")])
+    conn = sdgl.connect()
+    second = tmp_path / "mirror" / "a.tif"
+    second.parent.mkdir(parents=True)
+    second.write_bytes(b"version-two-wins")
+    st = second.stat()
+    chosen_id = sdgl.upsert_location(node_id, "backup-drive", str(second), role="file",
+                                     qualifier="raw", rel_path="raw/a.tif", size=st.st_size,
+                                     mtime=st.st_mtime, is_dir=0, metadata={"name": "a.tif"}, conn=conn)
+    conn.commit()
+    dest = tmp_path / "dest"
+    try:
+        summary = run_backup(
+            conn, [{"node_id": node_id, "rel_path": ""}], str(dest),
+            resolutions={f"{node_id}\nraw/a.tif": chosen_id},
+        )
+    finally:
+        conn.close()
+    assert summary["copied"] == 1
+    assert (dest / "TFMSP" / "TFMSP-01" / "raw" / "a.tif").read_bytes() == b"version-two-wins"
+
+
+def test_run_backup_skips_unresolved_conflict(tmp_path):
+    sdgl, node_id = _sdgl_with_files(tmp_path, [("raw/a.tif", b"one")])
+    conn = sdgl.connect()
+    second = tmp_path / "mirror" / "a.tif"
+    second.parent.mkdir(parents=True)
+    second.write_bytes(b"two-differs")
+    st = second.stat()
+    sdgl.upsert_location(node_id, "drive", str(second), role="file", qualifier="raw",
+                         rel_path="raw/a.tif", size=st.st_size, mtime=st.st_mtime, is_dir=0,
+                         metadata={"name": "a.tif"}, conn=conn)
+    conn.commit()
+    dest = tmp_path / "dest"
+    try:
+        summary = run_backup(conn, [{"node_id": node_id, "rel_path": ""}], str(dest))
+    finally:
+        conn.close()
+    assert summary["copied"] == 0
+    assert summary["skipped"][0]["reason"] == "unresolved conflict"
+
+
+def test_run_backup_emits_progress(tmp_path):
+    sdgl, node_id = _sdgl_with_files(tmp_path, [("raw/a.tif", b"aaa")])
+    dest = tmp_path / "dest"
+    events = []
+    conn = sdgl.connect()
+    try:
+        run_backup(conn, [{"node_id": node_id, "rel_path": ""}], str(dest), progress=events.append)
+    finally:
+        conn.close()
+    phases = [e["phase"] for e in events]
+    assert phases[0] == "start" and phases[-1] == "done"
+    assert events[-1]["summary"]["copied"] == 1
+
+
+def test_backup_job_snapshot_isolation():
+    job = BackupJob()
+    job.update(status="running", done_files=1)
+    snap = job.snapshot()
+    snap["status"] = "tampered"
+    assert job.snapshot()["status"] == "running"

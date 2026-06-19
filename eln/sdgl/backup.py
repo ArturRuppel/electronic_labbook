@@ -118,3 +118,71 @@ def plan_backup(conn, selections):
         "missing": missing,
         "conflicts": conflicts,
     }
+
+
+def run_backup(conn, selections, dest_root, resolutions=None, progress=None):
+    """Copy the selected logical files to ``dest_root``, organized by CODE.
+
+    ``resolutions`` maps ``f"{node_id}\\n{rel_path}"`` to the ``location.id`` chosen
+    for a conflicting file. Missing files and unresolved conflicts are skipped and
+    reported. ``progress`` (if given) receives 'start', 'file', and 'done' events.
+    """
+    resolutions = resolutions or {}
+    logical = resolve_logical_files(conn, selections)
+    work, skipped = [], []
+    for (node_id, rel), copies in logical.items():
+        result = classify(copies)
+        if result["status"] == "ok":
+            chosen = result["chosen"]
+        elif result["status"] == "conflict":
+            chosen_id = resolutions.get(f"{node_id}\n{rel}")
+            chosen = next((c for c in copies if c["id"] == chosen_id), None)
+            if not chosen:
+                skipped.append({"node_id": node_id, "rel_path": rel, "reason": "unresolved conflict"})
+                continue
+        else:
+            skipped.append({"node_id": node_id, "rel_path": rel, "reason": "missing on disk"})
+            continue
+        work.append((node_id, rel, chosen["path"], chosen["size"] or 0))
+
+    total_files = len(work)
+    total_bytes = sum(item[3] for item in work)
+    done_files = done_bytes = 0
+    errors = []
+    if progress:
+        progress({"phase": "start", "total_files": total_files, "total_bytes": total_bytes})
+    dest_root = Path(dest_root)
+    for node_id, rel, src, size in work:
+        target = dest_root / dest_subpath(node_id) / rel
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, target)
+            done_files += 1
+            done_bytes += size
+        except OSError as exc:
+            errors.append({"node_id": node_id, "rel_path": rel, "error": str(exc)})
+        if progress:
+            progress({"phase": "file", "done_files": done_files, "total_files": total_files,
+                      "done_bytes": done_bytes, "total_bytes": total_bytes, "current": rel})
+    summary = {"copied": done_files, "bytes": done_bytes, "skipped": skipped,
+               "errors": errors, "dest": str(dest_root)}
+    if progress:
+        progress({"phase": "done", "summary": summary})
+    return summary
+
+
+class BackupJob:
+    """Thread-safe status for one running backup, updated from the worker thread
+    and polled by the UI. One job at a time per server process."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._state = {"status": "idle"}
+
+    def snapshot(self):
+        with self._lock:
+            return dict(self._state)
+
+    def update(self, **fields):
+        with self._lock:
+            self._state.update(fields)
