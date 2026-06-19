@@ -245,7 +245,7 @@ location you choose.
 
 ## Phase D — Plugin + features on the clean base
 
-### 9. Presentations as the first plugin  ·  M  ·  _OSS plugin template_
+### 9. Presentations as the first plugin  ·  M  ·  _done · OSS plugin template_
 Bring presentations in **as** a plugin against clean extension points (nav
 registration, generator hook, scan-root contribution, serving route) — defined
 correctly the first time rather than coupled-then-extracted. Becomes the
@@ -512,6 +512,10 @@ SDGL engine, generators, Flask server + publish). **Step 7** — the unified
 `labbook` CLI (serve/scan/regenerate/rebuild/publish/backup) is done, and
 **step 8** — the backup tool (selectable data copy) — is done: `labbook backup`
 launches the explorer with per-row checkboxes, a content-hash-deduped preview,
-conflict resolution, and live progress. Next: **Phase D — the presentations
-plugin (step 9)**, then the one-time data migration (step 9b) and the feature
-backlog (step 10). Sharing (Phase F) is intentionally last.
+conflict resolution, and live progress. **Step 9** — presentations as the first
+plugin — is done: an `eln.plugins` API with four extension points (nav,
+generator, serving route, scan-root), discovered from a built-in list plus
+third-party entry points, with presentations re-expressed entirely as a plugin.
+Next: **the one-time data migration (step 9b)** against the now-settled plugin
+layout, then the feature backlog (step 10). Sharing (Phase F) is intentionally
+last.
