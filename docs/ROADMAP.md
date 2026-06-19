@@ -140,7 +140,8 @@ This is a standalone migration script run once during Phase A.
 # Development sequence
 
 Subsystem dependency order is preserved (skeleton → diffable DB → SDGL →
-generators → server → CLI → backup → plugin → features → compliance → sharing).
+generators → server → CLI → backup → plugin → data migration → features →
+compliance → sharing).
 Each step is its own
 spec/plan/impl cycle.
 
@@ -245,6 +246,21 @@ Bring presentations in **as** a plugin against clean extension points (nav
 registration, generator hook, scan-root contribution, serving route) — defined
 correctly the first time rather than coupled-then-extracted. Becomes the
 template for future plugins and reinforces the open-source story.
+
+### 9b. One-time data migration (concentrated move)  ·  M  ·  _run once, after step 9_
+A single concentrated data move once the presentation plugin (step 9) is in place,
+so the whole corpus lands in one pass against final layout/extension points rather
+than being dribbled in. **Notebook text (`experiments.db`) is already migrated in
+step 3** — this is the binary/source-file corpus that lives in the data repo:
+- **reports/** — copy report source (`.md` + figures) into the new data-repo layout.
+- **presentations/** — copy slide sources in (depends on step 9's scan-root /
+  serving layout being settled).
+- **thumbnails / movie posters — regenerated, not copied** (run the generators
+  against the migrated corpus; ffmpeg transcode at build time per step 5).
+- raw/derived data files — referenced in place by SDGL; not copied here (durability
+  is step 8's job).
+- **Verify after move:** re-scan + regenerate produces byte-identical pages (no
+  timestamp churn) and no broken relative / `file://` links.
 
 ### 10. Feature / polish backlog  ·  port/build once, here
 - **B — Catalog visual polish** (M): experiment-overview layout (clipping, full
@@ -384,6 +400,9 @@ building the wrong thing.
 ## Next step
 
 Phases A–B are **done** (steps 1–6: repos, diffable DB, history reconstruction,
-SDGL engine, generators, Flask server + publish). Begin **Phase C, step 7** — the
-unified `labbook` CLI (serve/scan/regenerate/rebuild/publish/backup) — then step 8
-the backup tool. Sharing (Phase F) is intentionally last.
+SDGL engine, generators, Flask server + publish). **Step 7** — the unified
+`labbook` CLI (serve/scan/regenerate/rebuild/publish/backup) — is essentially done;
+`labbook backup` launches into step 8. Next: **Step 8, the backup tool**
+(selectable data copy). Then Phase D — the presentations plugin (step 9), the
+one-time data migration (step 9b), and the feature backlog (step 10). Sharing
+(Phase F) is intentionally last.
