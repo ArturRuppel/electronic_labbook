@@ -91,7 +91,7 @@ below is the acceptance checklist that guards against that.
 
 | | `electronic_labbook` | `electronic_labbook_database` |
 |---|---|---|
-| **Host** | GitHub, **public** | GitLab, **private** |
+| **Host** | GitHub, **public** | GitHub, **private** |
 | **Contents** | code only | data only |
 | Schema/migrations, `dump_db.py`/`rebuild_db.py` | ✅ | — |
 | Generators, Flask server, SDGL engine, plugin API, overlay/admin | ✅ | — |
@@ -101,7 +101,7 @@ below is the acceptance checklist that guards against that.
 | `experiments.sql` (diffable dump, reconstructed history) | — | ✅ |
 | `reports/`, `protocols/`, presentation slides | — | ✅ |
 | `*.db` binaries (`experiments.db`, `sdgl.db`) | gitignored | gitignored |
-| Static export (`catalog/`) | — | built & served via **GitLab Pages** |
+| Static catalog (`catalog/`) | curated public subset → **GitHub Pages** | full static bundle written to the **Gaia share** (`file://`) |
 
 Both repos are created as folders **next to** the current project directory.
 
@@ -110,16 +110,17 @@ Both repos are created as folders **next to** the current project directory.
 - `experiments.db` and `sdgl.db` are **build artifacts**, never committed in
   either repo. `experiments.sql` is the versioned, line-diffable form.
 - **Local publish:** materialize dates → `dump_db.py` writes `experiments.sql` →
-  commit `experiments.sql` to the **data** repo → push to GitLab.
-- **GitLab CI (data repo) renders Pages.** Because the code lives on GitHub, the
-  data repo's CI must **fetch the code to build**:
-  1. clone / pip-install the public code repo at a **pinned ref**,
-  2. `rebuild_db.py` (`experiments.sql` → `experiments.db`),
-  3. run the generators against the data tree,
-  4. deploy `catalog/` to GitLab Pages.
-  The code is fetched by **cloning / pip-installing the public repo at a pinned
-  ref** recorded in the data repo's CI config, so every Pages build is
-  reproducible and code/data versions are explicit.
+  commit `experiments.sql` to the **data** repo → push to **private GitHub**
+  (gated by a pre-publish guardrail: reject/warn on staged files >90 MB).
+- **Sharing is two static-bundle tiers** (see step 7); Gaia is storage-only, so
+  no server runs for viewers:
+  - **Internal (Gaia share):** the full self-contained catalog + media is written
+    to a configured Gaia path; lab members open `index.html` from the mounted
+    drive (`file://`). No CI, no server.
+  - **Public (GitHub Pages):** the same builder emits a curated subset of
+    explicitly-marked items (movies transcoded to mp4), deployed to GitHub Pages
+    on demand. Only the scrubbed subset is published; the private data tree never
+    leaves the data repo.
 
 ## History reconstruction (one-time)
 
@@ -139,7 +140,8 @@ This is a standalone migration script run once during Phase A.
 # Development sequence
 
 Subsystem dependency order is preserved (skeleton → diffable DB → SDGL →
-generators → server/CI → plugin → features → compliance). Each step is its own
+generators → server → CLI → backup → plugin → features → compliance → sharing).
+Each step is its own
 spec/plan/impl cycle.
 
 ## Phase A — Stand up the two clean repos  ·  foundation
@@ -187,37 +189,117 @@ Port API routes, overlay injection, `admin.js` (incl. the done title↔ID
 synchronization), and a publish flow that commits `experiments.sql` to the
 **data** repo (not the code repo).
 
-### 7. GitLab CI in the data repo  ·  M
-Implement the [build & deploy flow](#build--deploy-flow): fetch code at a pinned
-ref → `rebuild_db.py` → generators → deploy `catalog/` to Pages, with no
-`sdgl.db` present.
+## Phase C — Make it usable & safe
 
-## Phase C — Plugin + features on the clean base
+### 7. CLI tools — unified `labbook` command  ·  M
+Replace raw `python -m eln.*` invocations with one discoverable entry point,
+installed via `[project.scripts]` (`pip install -e .` puts `labbook` on PATH). It
+resolves the data-repo root from `ELN_ROOT` (or a small config), overridable per
+call. Subcommands:
+- `labbook serve [--scan] [--port]` — **ensure the DB exists (build from
+  `experiments.sql` only if missing — never clobber unpublished edits)**, start
+  Flask, open the browser. (old `labbook`)
+- `labbook scan` — filesystem scan with **live feedback** (items found / updated /
+  added / errors); the `update_labbook` equivalent, no browser scan button.
+- `labbook regenerate` — DB → catalog HTML.
+- `labbook rebuild [--force]` — `experiments.sql` → DB (explicit reset; warn when
+  `experiments.sql` is newer than the DB rather than auto-overwriting).
+- `labbook publish` — DB → `experiments.sql` → commit + **push to the private
+  GitHub data remote**, gated by a **pre-publish guardrail** (reject/warn on any
+  staged file >90 MB; report repo size) so committing media to git stays
+  sustainable.
+- `labbook backup` — launch the backup flow (step 8).
 
-### 8. Presentations as the first plugin  ·  M  ·  _OSS plugin template_
+The three transforms stay **distinct** (they run in opposite directions):
+**rebuild** (sql→DB), **regenerate** (DB→HTML), **publish** (DB→sql). Startup only
+*ensures* the DB exists; it never rebuilds over a live working DB.
+
+### 8. Backup tool — selectable data copy  ·  M–L  ·  _was deferred; now scheduled_
+Backs up the **identified data** — raw **and** processed/derived, i.e. everything
+in SDGL's `file_locations` — *not* the notebook text (already redundant on private
+GitHub). UI = **the SDGL tree/graph with a checkbox per item** plus a **Backup**
+button that prompts for a destination folder and copies all files of the checked
+items there.
+- **Destination picker:** server-side **native folder dialog** (tkinter — the
+  server is local); typed path as fallback.
+- **Layout:** organize the copy by experiment **CODE** (navigable), over mirroring
+  raw source paths.
+- **Pre-copy preview + guard:** show total file count and **size** before copying
+  (can be huge); confirm before proceeding.
+- **Duplicate sightings:** the same logical file may be recorded at multiple
+  paths. **Dedup by content — hash the copies; if identical, copy one silently; if
+  they differ, surface the conflict for the user to pick.** (Reuses the compliance
+  layer's content hash once it lands; a lightweight on-the-fly hash until then.)
+- **Robustness:** skip + report SDGL-recorded files that no longer exist on disk;
+  live progress like the scan.
+
+Distinct from **sharing** (step 12): backup is for *durability/recovery* of the
+real data files; sharing is for *read-only views*. Distinct from **publish**:
+publish snapshots the notebook to git/GitHub; backup copies the bulk data off to a
+location you choose.
+
+## Phase D — Plugin + features on the clean base
+
+### 9. Presentations as the first plugin  ·  M  ·  _OSS plugin template_
 Bring presentations in **as** a plugin against clean extension points (nav
 registration, generator hook, scan-root contribution, serving route) — defined
 correctly the first time rather than coupled-then-extracted. Becomes the
 template for future plugins and reinforces the open-source story.
 
-### 9. Feature / polish backlog  ·  port/build once, here
+### 10. Feature / polish backlog  ·  port/build once, here
 - **B — Catalog visual polish** (M): experiment-overview layout (clipping, full
   width, responsive columns); protocols page styled to match the reports page.
 - **D — Field history + channel fungibility** (M–L): datalist autocomplete from
   new distinct-value endpoints; treat fungible channels as equivalent
   (e.g. "GFP" = "488" = "FITC" when configured).
-- **C — Backup** (M–L): export all experiment files to a chosen destination with
-  a source→destination preview. **Open design decision first:** server-side
-  native dialog (tkinter) vs typed path — it shapes the whole feature.
 
 *(Frozen on the old repo to avoid double-porting; built once on the clean base.)*
 
-## Phase D — North star
+## Phase E — North star
 
-### 10. Compliance layer
+### 11. Compliance layer
 Content hashing (additive to scan — can begin once the SDGL engine lands) →
 hash-chained audit log → RFC 3161 trusted timestamps, per the
 [Compliance layer](#compliance-layer-the-value-add-that-motivates-open-sourcing).
+Content hashing also feeds step 8's duplicate-dedup.
+
+## Phase F — Sharing  ·  _last, per decision_
+
+### 12. Sharing via static bundles: internal (Gaia share) + selective public (GitHub Pages)  ·  M–L
+**Gaia is storage-only — a mounted network drive, no compute** — so neither tier
+runs a server for viewers. Both are built on **one core: a self-contained
+static-catalog bundle builder** that assembles the generated pages + only the
+referenced reports/presentations/media into a `file://`-openable tree (relative
+links, a **static** landing page — *not* the API-driven `sdgl.html`). This
+supersedes the dropped "private GitLab Pages behind a password" plan.
+
+**12a — Internal: write the full bundle onto the Gaia share.** Generate/sync the
+complete static catalog + media to a configured Gaia path; lab members open
+`index.html` straight from the mounted drive. No server, no auth infra — access =
+whoever can mount the share. The live SDGL graph and the edit overlay/admin are
+owner-only authoring tools (served by the local `eln.server`) and are simply
+absent from the static bundle.
+
+**12b — Public: the same builder, filtered + scrubbed, to GitHub Pages.** Build a
+bundle of only **public-marked** items + their media (movies **transcoded to
+H.264 mp4** for browser playback) and deploy to **GitHub Pages** on demand.
+Public = world-readable: this is the sensitivity/PII gate — only the curated
+bundle is published, the private data tree never leaves the data repo.
+
+**Gaia reality (confirmed):** Gaia is auto-mounted at `/gaia` and the lab already
+uses it — the shared raw microscopy data lives there (scan roots `gaia-*`:
+`/gaia/PCMC_Microscopie/…`, `/gaia/PCMC_PBI/…`), while `reports/` and
+`presentations/` live in the data repo. So the internal bundle stays small:
+catalog HTML + `reports`/`presentations`/`thumbnails` (they embed their own
+figures/movies), written to a **lab-visible `/gaia` folder**. Raw trees stay in
+place and are **not** bundled.
+
+**Open questions (scope before building):** which shared `/gaia` folder is the
+publish target (lab-visible, not the per-person `…/Artur Ruppel` dirs); bundle
+on-disk layout for relative-link / `file://` integrity; movie transcode now
+matters for **both** tiers (ffmpeg at build time); Pages target (a **dedicated
+public repo** is cleaner than a dir of the code repo); selection UX (persistent
+`public` flag vs pick-at-publish-time).
 
 ---
 
@@ -249,14 +331,26 @@ acceptance criteria**, not re-derive them:
 
 ## Resolved decisions
 
-- **CI code-fetch mechanism** — the data repo's GitLab CI **clones / pip-installs
-  the public code repo at a pinned ref** recorded in its CI config (chosen over
-  git submodule / vendored copy), so Pages builds are reproducible and the
-  code/data version coupling is explicit.
+- **Data-repo host** — **private GitHub** (not GitLab). Both repos live on
+  GitHub: code public, data private. `publish` = commit + push there; this is the
+  notebook's off-machine redundancy.
+- **Media in git** — movies/figures **stay committed in the data repo**, kept
+  sustainable by discipline (small files, one version per movie) + a **pre-publish
+  guardrail** (reject/warn on staged files >90 MB — GitHub's hard limit is 100 MB
+  — and report repo size). No Git-LFS / out-of-git media split needed.
+- **Sharing comes last** (Phase F) and is **static-bundle based** (Gaia share +
+  selective GitHub Pages); the earlier "GitLab CI renders private Pages for the
+  whole catalog behind a password" plan is **dropped** (weak auth, standing infra,
+  movies fight Pages/LFS).
+- **CLI shape** — one unified `labbook <subcommand>` (over separate scripts);
+  installed via `[project.scripts]`, root from `ELN_ROOT`.
+- **DB build timing** — startup *ensures* the DB exists (build from
+  `experiments.sql` only if missing); rebuild (sql→DB), regenerate (DB→HTML), and
+  publish (DB→sql) stay distinct and are never merged.
 - **Transition** — **run the old in-place app in parallel** until the clean
   rebuild reaches feature parity, then cut over. New feature work is **frozen on
-  the old repo** to avoid double-porting; B/C/D are built once on the clean base
-  (Phase C).
+  the old repo** to avoid double-porting; backlog features are built once on the
+  clean base.
 
 ## Deferred / won't do
 
@@ -289,6 +383,7 @@ building the wrong thing.
 
 ## Next step
 
-Begin **Phase A, step 1** — create the two sibling repos with their boundaries,
-LICENSE, README, `.gitignore`, and the `sdgl.toml` template — then step 2's
-diffable-DB plumbing, which everything downstream depends on.
+Phases A–B are **done** (steps 1–6: repos, diffable DB, history reconstruction,
+SDGL engine, generators, Flask server + publish). Begin **Phase C, step 7** — the
+unified `labbook` CLI (serve/scan/regenerate/rebuild/publish/backup) — then step 8
+the backup tool. Sharing (Phase F) is intentionally last.
