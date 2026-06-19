@@ -1,0 +1,53 @@
+# ---------------------------------------------------------------------------
+# Databases are BUILD ARTIFACTS, never committed.
+# The versioned, line-diffable form lives in the *data* repo as experiments.sql
+# and is rebuilt into experiments.db by rebuild_db.py.
+# ---------------------------------------------------------------------------
+*.db
+*.db.bak
+*.db-wal
+*.db-shm
+*.backup-*
+
+# Local SDGL config (ship sdgl.toml.example; users copy it to sdgl.toml)
+sdgl.toml
+
+# Generated static catalog (produced by the generators at build time)
+catalog/*.html
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Packaging / tooling
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+
+# Agent / MCP tool caches
+.serena/
