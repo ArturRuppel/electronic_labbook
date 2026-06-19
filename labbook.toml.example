@@ -13,3 +13,12 @@ daily_scan = false
 [[scan_roots]]
 name = "data"
 path = "data"
+
+# Channel fungibility: groups of interchangeable microscopy markers. The first
+# member of each group is the canonical label; the others are treated as aliases
+# of it in autocomplete suggestions. Optional — omit if you don't use it.
+# [channels]
+# aliases = [
+#     ["GFP", "488", "FITC"],
+#     ["RFP", "561", "mCherry"],
+# ]

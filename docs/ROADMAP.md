@@ -272,9 +272,12 @@ step 3** — this is the binary/source-file corpus that lives in the data repo:
   1760px container + `min-width` table that scrolls instead of crushing on
   narrow viewports); protocols page restyled as individual cards in a 1000px
   container to match the reports page.
-- **D — Field history + channel fungibility** (M–L): datalist autocomplete from
-  new distinct-value endpoints; treat fungible channels as equivalent
-  (e.g. "GFP" = "488" = "FITC" when configured).
+- **D — Field history + channel fungibility** (M–L) — _done_: datalist
+  autocomplete from a new distinct-value endpoint (`/api/field-values`) so
+  suggestions reflect the whole database, not just loaded rows (now also covers
+  channel targets); fungible channel markers collapse to a canonical label when
+  configured via `[channels].aliases` in `labbook.toml`
+  (e.g. "GFP" = "488" = "FITC").
 
 *(Frozen on the old repo to avoid double-porting; built once on the clean base.)*
 
@@ -519,6 +522,7 @@ conflict resolution, and live progress. **Step 9** — presentations as the firs
 plugin — is done: an `eln.plugins` API with four extension points (nav,
 generator, serving route, scan-root), discovered from a built-in list plus
 third-party entry points, with presentations re-expressed entirely as a plugin.
-Next: **the one-time data migration (step 9b)** against the now-settled plugin
-layout, then the feature backlog (step 10). Sharing (Phase F) is intentionally
-last.
+**Step 9b** — the one-time data migration against the settled plugin layout — is
+done, as are the feature-backlog items **10B** (catalog visual polish) and **10D**
+(field-history autocomplete + channel fungibility). Next: the analysis library +
+provenance stamps (step 10b). Sharing (Phase F) is intentionally last.

@@ -25,6 +25,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 
+from eln.channels import build_alias_map, canonical_channel
 from eln.generators import generate_all
 from eln.plugins import discover_plugins, effective_scan_roots
 from eln.sdgl import (
@@ -65,11 +66,14 @@ OVERLAY_SNIPPET = '''
 _AUTH_SCRIPT_RE = re.compile(r'<script\s+src=["\']auth\.js["\']\s*>\s*</script>')
 
 
-def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, scan_roots=None):
+def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
+               scan_roots=None, channel_aliases=None):
     """Build the Flask app bound to data-repo ``root``.
 
     ``scan_roots`` is the injected list of scan-root configs (from the unified
     ``labbook.toml``); the scan route uses it instead of reading a per-repo file.
+    ``channel_aliases`` is the list of channel equivalence groups (also from the
+    config); it drives fungible-marker collapsing in the field-values endpoint.
     """
     root = Path(root)
     database_path = Path(eln_db_path) if eln_db_path else root / "experiments.db"
@@ -81,6 +85,8 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, sc
 
     app = Flask(__name__)
     CORS(app)  # Enable CORS for local development
+
+    channel_alias_map = build_alias_map(channel_aliases)
 
     plugins = discover_plugins()
     # Configured scan roots plus any a plugin contributes (scan-root extension point).
@@ -359,6 +365,61 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, sc
         tags = [row[0] for row in cursor.fetchall()]
         conn.close()
         return jsonify(tags)
+
+    @app.route("/api/field-values", methods=["GET"])
+    def field_values():
+        """Distinct values per field, for autocomplete (field history).
+
+        Suggestions reflect the whole database rather than only the rows the
+        admin page has loaded. Channel targets are collapsed through the
+        configured fungibility map so equivalent markers ("GFP"/"488"/"FITC")
+        surface as a single canonical suggestion.
+        """
+        conn = get_db()
+        cursor = conn.cursor()
+
+        def _distinct(sql):
+            cursor.execute(sql)
+            return sorted(
+                {(row[0] or "").strip() for row in cursor.fetchall() if (row[0] or "").strip()},
+                key=str.lower,
+            )
+
+        experiment_type = _distinct("SELECT DISTINCT experiment_type FROM experiments")
+        microscope = _distinct("SELECT DISTINCT microscope FROM experiments")
+        channel_modality = _distinct("SELECT DISTINCT modality FROM experiment_channels")
+
+        # cell_types is a comma-joined string per experiment; split into parts.
+        cursor.execute("SELECT cell_types FROM experiments")
+        cell_types = sorted(
+            {
+                part.strip()
+                for (value,) in cursor.fetchall()
+                for part in (value or "").split(",")
+                if part.strip()
+            },
+            key=str.lower,
+        )
+
+        # Channel targets collapse fungible variants to their canonical label.
+        cursor.execute("SELECT DISTINCT target FROM experiment_channels")
+        channel_target = sorted(
+            {
+                canonical_channel(row[0], channel_alias_map)
+                for row in cursor.fetchall()
+                if canonical_channel(row[0], channel_alias_map)
+            },
+            key=str.lower,
+        )
+
+        conn.close()
+        return jsonify({
+            "experiment_type": experiment_type,
+            "cell_types": cell_types,
+            "microscope": microscope,
+            "channel_target": channel_target,
+            "channel_modality": channel_modality,
+        })
 
     @app.route("/api/experiments", methods=["GET"])
     def list_experiments():

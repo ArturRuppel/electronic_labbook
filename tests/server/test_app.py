@@ -83,6 +83,65 @@ def test_update_and_delete_experiment(client):
     assert client.get("/api/experiments/1").status_code == 404
 
 
+# --- field values (autocomplete / fungibility) ------------------------------
+
+def _seed_field_values(tmp_path):
+    """A data root with two experiments and channels using fungible markers."""
+    root = tmp_path
+    db = root / "experiments.db"
+    init_db.init_db(db)
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "INSERT INTO experiments (id, experiment_type, cell_types, microscope, file_path) "
+        "VALUES (1, 'Traction Force', 'HUVEC, NIH-3T3', 'Nikon TiE2', 'a')"
+    )
+    conn.execute(
+        "INSERT INTO experiments (id, experiment_type, cell_types, microscope, file_path) "
+        "VALUES (2, 'Migration', 'HUVEC', 'Zeiss LSM', 'b')"
+    )
+    # Two experiments label the same dye differently: "GFP" and "488".
+    conn.execute(
+        "INSERT INTO experiment_channels (experiment_id, channel_order, channel_label, target, modality) "
+        "VALUES (1, 1, 'Green', 'GFP', NULL)"
+    )
+    conn.execute(
+        "INSERT INTO experiment_channels (experiment_id, channel_order, channel_label, target, modality) "
+        "VALUES (2, 1, 'Green', '488', NULL)"
+    )
+    conn.execute(
+        "INSERT INTO experiment_channels (experiment_id, channel_order, channel_label, target, modality) "
+        "VALUES (1, 5, 'Brightfield', NULL, 'Phase contrast')"
+    )
+    conn.commit()
+    conn.close()
+    (root / "reports").mkdir()
+    return root
+
+
+def test_field_values_distinct_and_split(tmp_path):
+    app = create_app(_seed_field_values(tmp_path))
+    data = app.test_client().get("/api/field-values").get_json()
+    assert data["experiment_type"] == ["Migration", "Traction Force"]
+    # cell_types is comma-split and de-duplicated across experiments.
+    assert data["cell_types"] == ["HUVEC", "NIH-3T3"]
+    assert data["microscope"] == ["Nikon TiE2", "Zeiss LSM"]
+    assert data["channel_modality"] == ["Phase contrast"]
+
+
+def test_field_values_collapses_fungible_channels(tmp_path):
+    root = _seed_field_values(tmp_path)
+    app = create_app(root, channel_aliases=[["GFP", "488", "FITC"]])
+    data = app.test_client().get("/api/field-values").get_json()
+    # "GFP" and "488" collapse to the canonical "GFP" — one suggestion.
+    assert data["channel_target"] == ["GFP"]
+
+
+def test_field_values_without_aliases_keeps_variants(tmp_path):
+    app = create_app(_seed_field_values(tmp_path))
+    data = app.test_client().get("/api/field-values").get_json()
+    assert data["channel_target"] == ["488", "GFP"]
+
+
 # --- protocols & reports ----------------------------------------------------
 
 def test_protocols_and_reports_crud(client):

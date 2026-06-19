@@ -594,6 +594,7 @@
                     <datalist id="exp-types-list"></datalist>
                     <datalist id="cell-types-list"></datalist>
                     <datalist id="microscopes-list"></datalist>
+                    <datalist id="channel-targets-list"></datalist>
                     <datalist id="tags-list"></datalist>
                     <datalist id="live-fixed-list">
                         <option value="Live">
@@ -677,19 +678,19 @@
                         <div id="exp-channels" class="channel-rows">
                             <div class="channel-row" data-label="Blue" data-type="fluorescence">
                                 <span class="channel-name">Blue</span>
-                                <input type="text" class="channel-target" placeholder="target / marker (e.g. DAPI, nucleus) — leave empty if unused" />
+                                <input type="text" class="channel-target" list="channel-targets-list" placeholder="target / marker (e.g. DAPI, nucleus) — leave empty if unused" />
                             </div>
                             <div class="channel-row" data-label="Green" data-type="fluorescence">
                                 <span class="channel-name">Green</span>
-                                <input type="text" class="channel-target" placeholder="target / marker (e.g. Phalloidin, F-actin) — leave empty if unused" />
+                                <input type="text" class="channel-target" list="channel-targets-list" placeholder="target / marker (e.g. Phalloidin, F-actin) — leave empty if unused" />
                             </div>
                             <div class="channel-row" data-label="Red" data-type="fluorescence">
                                 <span class="channel-name">Red</span>
-                                <input type="text" class="channel-target" placeholder="target / marker (e.g. vinculin) — leave empty if unused" />
+                                <input type="text" class="channel-target" list="channel-targets-list" placeholder="target / marker (e.g. vinculin) — leave empty if unused" />
                             </div>
                             <div class="channel-row" data-label="Far-red" data-type="fluorescence">
                                 <span class="channel-name">Far-red</span>
-                                <input type="text" class="channel-target" placeholder="target / marker — leave empty if unused" />
+                                <input type="text" class="channel-target" list="channel-targets-list" placeholder="target / marker — leave empty if unused" />
                             </div>
                             <div class="channel-row" data-label="Brightfield" data-type="brightfield">
                                 <span class="channel-name">Brightfield</span>

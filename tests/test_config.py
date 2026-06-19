@@ -39,6 +39,24 @@ def test_absolute_scan_root_is_left_absolute(tmp_path):
     assert c.scan_roots[1]["path"] == ext.resolve()
 
 
+def test_channel_aliases_default_empty(tmp_path):
+    data = tmp_path / "data-repo"
+    data.mkdir()
+    cfg = _write_config(tmp_path, data)
+    assert load_config(cfg).channel_aliases == []
+
+
+def test_channel_aliases_parsed(tmp_path):
+    data = tmp_path / "data-repo"
+    data.mkdir()
+    cfg = _write_config(
+        tmp_path, data,
+        extra='\n[channels]\naliases = [["GFP", "488", "FITC"], ["RFP", "561"]]\n',
+    )
+    c = load_config(cfg)
+    assert c.channel_aliases == [["GFP", "488", "FITC"], ["RFP", "561"]]
+
+
 def test_root_override_beats_config(tmp_path):
     data = tmp_path / "data-repo"
     other = tmp_path / "other"

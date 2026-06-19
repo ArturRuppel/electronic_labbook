@@ -30,6 +30,7 @@ class Config:
     data_root: Path
     scanner: dict = field(default_factory=dict)
     scan_roots: list = field(default_factory=list)  # [{"name": str, "path": Path}]
+    channel_aliases: list = field(default_factory=list)  # [[canonical, variant, ...]]
 
 
 def find_config_path() -> Path:
@@ -78,8 +79,15 @@ def load_config(config_path=None, *, root_override=None) -> Config:
             p = data_root / p
         scan_roots.append({"name": entry.get("name"), "path": p.resolve()})
 
+    # Channel fungibility: equivalence groups of interchangeable markers
+    # (e.g. ["GFP", "488", "FITC"]); the first member is canonical.
+    channel_aliases = [
+        list(group) for group in data.get("channels", {}).get("aliases", [])
+    ]
+
     return Config(
         data_root=data_root,
         scanner=data.get("scanner", {}),
         scan_roots=scan_roots,
+        channel_aliases=channel_aliases,
     )

@@ -81,7 +81,8 @@ async function loadInitialData() {
         loadProtocols(),
         loadReports(),
         loadProtocolsForCheckboxes(),
-        loadTagSuggestions()
+        loadTagSuggestions(),
+        loadFieldValues()
     ]);
     updateStats();
 }
@@ -133,33 +134,43 @@ async function loadExperiments() {
 let codesByTitle = {};
 let titlesByCode = {};
 
+// Build the title<->code maps from the loaded experiments. Field autocomplete
+// itself is server-driven (see loadFieldValues); this only feeds the two
+// identity fields that fill each other.
 function populateDatalistsFromExperiments(experiments) {
-    // Get unique values for each field
-    const expTypes = new Set();
-    const cellTypes = new Set();
-    const microscopes = new Set();
-
     codesByTitle = {};
     titlesByCode = {};
     experiments.forEach(exp => {
-        if (exp.experiment_type) expTypes.add(exp.experiment_type);
         if (exp.experiment_type && exp.code) {
             codesByTitle[exp.experiment_type] = exp.code;
             titlesByCode[exp.code] = exp.experiment_type;
         }
-        if (exp.cell_types) splitCellTypes(exp.cell_types).forEach(ct => cellTypes.add(ct));
-        if (exp.microscope) microscopes.add(exp.microscope);
     });
     suggestCodeForTitle();
+}
 
-    // Populate datalists
-    const expTypesList = document.getElementById('exp-types-list');
-    const cellTypesList = document.getElementById('cell-types-list');
-    const microscopesList = document.getElementById('microscopes-list');
-
-    expTypesList.innerHTML = Array.from(expTypes).sort().map(v => `<option value="${v}">`).join('');
-    cellTypesList.innerHTML = Array.from(cellTypes).sort().map(v => `<option value="${v}">`).join('');
-    microscopesList.innerHTML = Array.from(microscopes).sort().map(v => `<option value="${v}">`).join('');
+// Autocomplete datalists, populated from the server's distinct-value endpoint so
+// suggestions reflect the whole database (and collapse fungible channel markers)
+// rather than only the currently loaded rows.
+async function loadFieldValues() {
+    const targets = {
+        experiment_type: 'exp-types-list',
+        cell_types: 'cell-types-list',
+        microscope: 'microscopes-list',
+        channel_target: 'channel-targets-list',
+    };
+    try {
+        const response = await fetch(`${API_BASE_URL}/field-values`);
+        const values = await response.json();
+        Object.entries(targets).forEach(([field, listId]) => {
+            const datalist = document.getElementById(listId);
+            if (!datalist) return;
+            const options = Array.isArray(values[field]) ? values[field] : [];
+            datalist.innerHTML = options.map(v => `<option value="${v}"></option>`).join('');
+        });
+    } catch (error) {
+        // Suggestions are optional; ignore load failures.
+    }
 }
 
 function createExperimentListItem(exp) {
@@ -594,6 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     showAlert(id ? 'Experiment updated successfully' : 'Experiment created successfully', 'success');
                     resetExperimentForm();
                     await loadExperiments();
+                    loadFieldValues();
                     updateStats();
                 } else {
                     showAlert('Error: ' + result.error, 'error');

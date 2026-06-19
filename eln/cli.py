@@ -39,7 +39,11 @@ def cmd_admin(args):
 
     config = _load(args)
     _ensure_db(config)
-    app = create_app(config.data_root, scan_roots=config.scan_roots)
+    app = create_app(
+        config.data_root,
+        scan_roots=config.scan_roots,
+        channel_aliases=config.channel_aliases,
+    )
     url = f"http://localhost:{args.port}/"
     print("=" * 50)
     print(f"Lab Notebook (admin view): {url}")
@@ -116,7 +120,11 @@ def cmd_backup(args):
 
     config = _load(args)
     _ensure_db(config)
-    app = create_app(config.data_root, scan_roots=config.scan_roots)
+    app = create_app(
+        config.data_root,
+        scan_roots=config.scan_roots,
+        channel_aliases=config.channel_aliases,
+    )
     url = f"http://localhost:{args.port}/"
     print("=" * 50)
     print(f"Lab Notebook backup: {url}")
