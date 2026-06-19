@@ -69,3 +69,19 @@ def test_publish_missing_db_returns_error(tmp_path):
     result = publish(tmp_path, push=False)
     assert "error" in result
     assert "not found" in result["error"].lower()
+
+
+def test_publish_rejects_oversized_staged_file(data_repo):
+    """A staged file >90 MB hard-fails the publish and is never committed."""
+    big = data_repo / "reports" / "huge.bin"
+    with open(big, "wb") as fh:
+        fh.truncate(91 * 1024 * 1024)  # sparse: 91 MB apparent size, ~no disk use
+
+    result = publish(data_repo, push=False)
+    assert "error" in result
+    assert "huge.bin" in result["error"]
+
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=str(data_repo), capture_output=True, text=True
+    ).stdout
+    assert "huge.bin" not in tracked  # nothing oversized committed
