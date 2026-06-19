@@ -14,6 +14,7 @@ from eln.generators.home import generate_home
 from eln.generators.presentations import generate_presentations
 from eln.generators.protocols import generate_protocol_catalog
 from eln.generators.reports import generate_reports
+from eln.plugins import discover_plugins
 
 __all__ = [
     "generate_catalog",
@@ -26,14 +27,20 @@ __all__ = [
 
 
 def generate_all(root, catalog_out=None):
-    """Run every generator against the data-repo *root*.
+    """Run the core generators and every plugin generator against *root*.
 
-    Returns a dict mapping each page name to the path it was written to.
+    The same discovered plugin set feeds each core generator (so nav/home stay
+    consistent) and supplies the plugin-contributed pages. Returns a dict mapping
+    each page name to the path it was written to.
     """
-    return {
-        "experiments": generate_catalog(root, catalog_out),
-        "protocols": generate_protocol_catalog(root, catalog_out),
-        "reports": generate_reports(root, catalog_out),
-        "presentations": generate_presentations(root, catalog_out),
-        "home": generate_home(root, catalog_out),
+    plugins = discover_plugins()
+    written = {
+        "experiments": generate_catalog(root, catalog_out, plugins=plugins),
+        "protocols": generate_protocol_catalog(root, catalog_out, plugins=plugins),
+        "reports": generate_reports(root, catalog_out, plugins=plugins),
+        "home": generate_home(root, catalog_out, plugins=plugins),
     }
+    for plugin in plugins:
+        if plugin.generate:
+            written[plugin.name] = plugin.generate(root, catalog_out)
+    return written
