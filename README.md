@@ -88,6 +88,7 @@ electronic_labbook/
 ├── eln/                     # the Python package
 │   ├── db/                  # schema, migrations, dump_db.py / rebuild_db.py
 │   ├── sdgl/                # the SDGL scan engine + naming grammar
+│   ├── analysis/            # reusable analysis library + provenance stamps
 │   ├── generators/          # catalog / reports / home / protocol page generators
 │   ├── server/              # Flask API, overlay/admin injection, publish flow
 │   └── plugins/             # plugin API + extension points

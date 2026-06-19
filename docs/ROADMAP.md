@@ -281,7 +281,17 @@ step 3** — this is the binary/source-file corpus that lives in the data repo:
 
 *(Frozen on the old repo to avoid double-porting; built once on the clean base.)*
 
-### 10b. Analysis library + provenance stamps  ·  M
+### 10b. Analysis library + provenance stamps  ·  M  ·  _done_
+Implemented as `eln/analysis/` (`stamp()` / `verify_provenance()`): a derived or
+curated artifact becomes a `dataset` node and its recipe rides as metadata on a
+`generates` edge from the producing experiment node — no SDGL schema change, and
+it surfaces in the graph explorer. Git commits auto-resolve (override-able);
+content hashing is an inline `sha256` (`eln.hashing.sha256_file`) until step 11.
+`verify_provenance()` (also `GET /api/sdgl/provenance/verify`) flags artifacts
+that drift from their stamped/committed state. See `eln/analysis/README.md`.
+
+<details><summary>Original spec</summary>
+
 Stand up `eln/analysis/` in the public repo as the reusable analysis library
 (importable from notebooks). Add `eln/analysis/provenance.py`: a `stamp()`
 utility that records a provenance entry **in SDGL** linking a derived file
@@ -299,6 +309,8 @@ to the data-repo layout for committed experiment-specific analysis
 notebooks/scripts and curated artifacts. SDGL gains a **verification check**:
 flag when a sighted notebook or curated artifact's content hash diverges
 from its last committed version.
+
+</details>
 
 ## Phase E — North star
 
@@ -523,6 +535,8 @@ plugin — is done: an `eln.plugins` API with four extension points (nav,
 generator, serving route, scan-root), discovered from a built-in list plus
 third-party entry points, with presentations re-expressed entirely as a plugin.
 **Step 9b** — the one-time data migration against the settled plugin layout — is
-done, as are the feature-backlog items **10B** (catalog visual polish) and **10D**
-(field-history autocomplete + channel fungibility). Next: the analysis library +
-provenance stamps (step 10b). Sharing (Phase F) is intentionally last.
+done, as are the feature-backlog items **10B** (catalog visual polish), **10D**
+(field-history autocomplete + channel fungibility), and **10b** (the analysis
+library + provenance stamps). Next: the compliance layer (step 11) — content
+hashing → hash-chained audit log → trusted timestamps. Sharing (Phase F) is
+intentionally last.

@@ -6,22 +6,19 @@ logical file are deduped by content hash: identical copies collapse to one,
 differing copies are surfaced as a conflict for the user to resolve.
 """
 
-import hashlib
 import os
 import shutil
 import threading
 from pathlib import Path
+
+from eln.hashing import sha256_hex
 
 CHUNK = 1024 * 1024
 
 
 def hash_file(path, chunk=CHUNK):
     """Stream a file's SHA-256 so large media never load fully into memory."""
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(chunk), b""):
-            digest.update(block)
-    return digest.hexdigest()
+    return sha256_hex(path, chunk)
 
 
 def dest_subpath(node_id):

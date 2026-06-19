@@ -142,6 +142,29 @@ def test_field_values_without_aliases_keeps_variants(tmp_path):
     assert data["channel_target"] == ["488", "GFP"]
 
 
+# --- provenance verify endpoint ---------------------------------------------
+
+def test_provenance_verify_endpoint(tmp_path):
+    """The endpoint mirrors verify_provenance(): clean -> [], tampered -> modified."""
+    import subprocess
+    from eln.analysis import stamp
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+    artifact = root / "SORVI-01" / "derived" / "out.npy"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"derived")
+    stamp(artifact, function="f", root=root, data_commit="x", library_commit="y")
+
+    client = create_app(root).test_client()
+    assert client.get("/api/sdgl/provenance/verify").get_json() == []
+
+    artifact.write_bytes(b"tampered")
+    result = client.get("/api/sdgl/provenance/verify").get_json()
+    assert result[0]["status"] == "modified"
+    assert result[0]["node_id"] == "dataset:SORVI-01/derived/out.npy"
+
+
 # --- protocols & reports ----------------------------------------------------
 
 def test_protocols_and_reports_crud(client):

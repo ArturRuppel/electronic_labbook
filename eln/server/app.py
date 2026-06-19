@@ -222,6 +222,13 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
             return jsonify({"success": True, "message": "Edge deleted"})
         return jsonify({"error": "Edge not found"}), 404
 
+    @app.route("/api/sdgl/provenance/verify", methods=["GET"])
+    def sdgl_verify_provenance():
+        """Flag stamped artifacts whose on-disk content diverges from the
+        hash recorded at stamp time (modified) or that are gone (missing)."""
+        from eln.analysis import verify_provenance
+        return jsonify(verify_provenance(root))
+
     @app.route("/api/sdgl/graph", methods=["GET"])
     def sdgl_graph():
         node_id = request.args.get("node_id")
