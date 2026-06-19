@@ -1,16 +1,36 @@
 # `eln.generators` — static page generators
 
-**Roadmap step 5** (includes Plan F).
+**Roadmap step 5** (includes Plan F). Ported from the original `scripts/generate_*.py`.
 
-Lands here (ported from the original `scripts/generate_*.py`):
+Every generator reads from a data-repo *root* (holding `experiments.db`, the
+optional `sdgl.db` build artifact, `reports/` and `presentations/`) and writes a
+static HTML page into `root/catalog` (or an explicit `catalog_out`):
 
-- `generate_catalog.py` — experiments page (reads `experiment_metadata.start_date`).
-- `generate_reports.py` — reports page **with the DB-generated report overview
-  built in from the start** (Plan F: `**Series:** CODE` + `{{experiments}}` →
-  injected series header, active-rep experiment table with derived dates,
-  deduplicated linked protocols).
-- `generate_home.py`, protocol catalog generator.
+- `catalog.py` → `experiments.html`. Experiment start dates are derived from the
+  earliest raw-file mtime via SDGL (`get_experiment_date_from_files`), never read
+  from the DB; the SDGL connection is optional (dates render as `-` without it).
+- `reports.py` → `reports.html`, rendering each markdown report. **Plan F**: a
+  report declaring `**Series:** CODE` and a `{{experiments}}` token gets the token
+  replaced with a DB-generated overview — a series header, a table of active
+  repetitions (excluded ones omitted) with derived dates, and the deduplicated
+  protocols used. An unknown series renders an inline error rather than crashing.
+- `protocols.py` → `protocols.html`, grouped by name with version history.
+- `presentations.py` → `presentations.html`, scanning `presentations/`.
+- `home.py` → `index.html` from the static `catalog/home_template.html` asset
+  (a code-repo input), filling in the experiment/protocol/report/presentation counts.
 
-**Regression guards:** no timestamp churn (static footers, date-only "Last
-updated"; regenerating twice is byte-identical). See `docs/ROADMAP.md` and
-`plans/plan-F-report-db-overview.md` (ported in step 5).
+## Usage
+
+```bash
+python -m eln.generators DATA_REPO_ROOT          # run all five
+python -m eln.generators.catalog DATA_REPO_ROOT  # or one at a time
+```
+
+Or from Python: `from eln.generators import generate_all; generate_all(root)`.
+
+## Regression guard: byte-identical regeneration
+
+Regenerating over unchanged inputs produces identical bytes — footers are static
+and the home page's "Last updated" is date-only (no `HH:MM:SS` churn). The
+vestigial `generation_date` kwarg from the original scripts was dropped so this is
+structural, not incidental. Covered by `tests/generators/test_generate.py`.

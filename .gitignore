@@ -12,8 +12,11 @@
 # Local SDGL config (ship sdgl.toml.example; users copy it to sdgl.toml)
 sdgl.toml
 
-# Generated static catalog (produced by the generators at build time)
+# Generated static catalog pages (produced by the generators at build time).
+# Static frontend assets that happen to be .html (templates, admin, graph view)
+# are negated below so they stay tracked.
 catalog/*.html
+!catalog/home_template.html
 
 # Python
 __pycache__/
