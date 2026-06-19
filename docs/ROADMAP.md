@@ -102,6 +102,8 @@ below is the acceptance checklist that guards against that.
 | `reports/`, `protocols/`, presentation slides | — | ✅ |
 | `*.db` binaries (`experiments.db`, `sdgl.db`) | gitignored | gitignored |
 | Static catalog (`catalog/`) | curated public subset → **GitHub Pages** | full static bundle written to the **Gaia share** (`file://`) |
+| `eln/analysis/` (reusable analysis library + `provenance.py`) | ✅ | — |
+| `notebooks/` (committed experiment-specific analysis code) | — | ✅ |
 
 Both repos are created as folders **next to** the current project directory.
 
@@ -215,12 +217,14 @@ The three transforms stay **distinct** (they run in opposite directions):
 **rebuild** (sql→DB), **regenerate** (DB→HTML), **publish** (DB→sql). Startup only
 *ensures* the DB exists; it never rebuilds over a live working DB.
 
-### 8. Backup tool — selectable data copy  ·  M–L  ·  _was deferred; now scheduled_
-Backs up the **identified data** — raw **and** processed/derived, i.e. everything
-in SDGL's `file_locations` — *not* the notebook text (already redundant on private
-GitHub). UI = **the SDGL tree/graph with a checkbox per item** plus a **Backup**
-button that prompts for a destination folder and copies all files of the checked
-items there.
+### 8. Backup tool — selectable data copy  ·  M–L  ·  _done_
+Backs up **raw data only** — the irreplaceable, too-large-for-git files on the
+filesystem. **Curated artifacts** (hand-drawn segmentations, manual ROIs, curated
+tracking) and **notebooks** are already in the remote git data repo; they are not
+backup targets. This simplifies the backup tool: it handles only the raw data that
+cannot live in git. UI = **the SDGL tree/graph with a checkbox per raw-data item**
+plus a **Backup** button that prompts for a destination folder and copies all
+checked files there.
 - **Destination picker:** server-side **native folder dialog** (tkinter — the
   server is local); typed path as fallback.
 - **Layout:** organize the copy by experiment **CODE** (navigable), over mirroring
@@ -271,6 +275,25 @@ step 3** — this is the binary/source-file corpus that lives in the data repo:
 
 *(Frozen on the old repo to avoid double-porting; built once on the clean base.)*
 
+### 10b. Analysis library + provenance stamps  ·  M
+Stand up `eln/analysis/` in the public repo as the reusable analysis library
+(importable from notebooks). Add `eln/analysis/provenance.py`: a `stamp()`
+utility that records a provenance entry **in SDGL** linking a derived file
+(by content hash + path) to the code that produced it (public-repo commit +
+function name, data-repo commit + notebook path, parameter values, `sha256`
+hashes of input files). For **curated artifacts** (hand-drawn segmentations,
+manual ROIs — irreproducible but mutable human-judgment outputs), `stamp()`
+records the tool, method, and data-repo commit of the curated file itself;
+these artifacts are committed to the data repo (like notebooks) so git
+provides version history and recoverability without making them immutable.
+**Files themselves are untouched — provenance is a graph relationship, not
+file metadata.** Content hashing from step 11 feeds the input hashes; a
+lightweight inline `sha256` is used until then. Add a `notebooks/` directory
+to the data-repo layout for committed experiment-specific analysis
+notebooks/scripts and curated artifacts. SDGL gains a **verification check**:
+flag when a sighted notebook or curated artifact's content hash diverges
+from its last committed version.
+
 ## Phase E — North star
 
 ### 11. Compliance layer
@@ -278,6 +301,72 @@ Content hashing (additive to scan — can begin once the SDGL engine lands) →
 hash-chained audit log → RFC 3161 trusted timestamps, per the
 [Compliance layer](#compliance-layer-the-value-add-that-motivates-open-sourcing).
 Content hashing also feeds step 8's duplicate-dedup.
+
+## Analysis code provenance
+
+A derived file is only traceable if the code that produced it is recoverable.
+SDGL sights files on the filesystem and detects modification or deletion — but
+it cannot recover a deleted file. **Detection is not preservation.** Code that
+generates research artifacts needs the same durability guarantee as the data
+itself: a remote git repository.
+
+**Rule: if it produces an artifact, it gets committed.** No third place.
+
+### Three artifact categories
+
+| Category | Characteristics | Storage | Provenance |
+|---|---|---|---|
+| **Raw data** | Immutable, irreplaceable, too large for git | filesystem + backup | SDGL content hash (witness only) |
+| **Curated artifacts** | Irreproducible but mutable (hand-drawn segmentations, manual ROIs, curated tracking) | **data repo** (`notebooks/CODE/` or `curated/`) | git commit + tool/method |
+| **Derived data** | Regenerable from code + inputs | filesystem only | SDGL graph link (commit + function + params + input hashes) |
+
+The general rule: **if it can't be regenerated from code + inputs, it gets
+committed.** Curated artifacts are not sacred like raw data — they can be
+refined, discarded, and redone — but they can't be regenerated, so they need
+version control, not just backup.
+
+**Provenance is a graph relationship, not file metadata.** Files themselves are
+untouched. `stamp()` records provenance entries in SDGL linking a file (by
+content hash + path) to what produced it — commit hashes, function names,
+parameter values, and input file hashes. Never source code, never anything
+executable. The graph says *"who made me and how to find the recipe"*; the
+recipe itself lives in version control where it can be audited, diffed, and
+recovered.
+
+```json
+{
+  "derived_file": {
+    "library": {
+      "repo": "github.com/ArturRuppel/electronic_labbook",
+      "commit": "a1b2c3d",
+      "function": "eln.analysis.tfm.compute_traction_field"
+    },
+    "notebook": {
+      "repo": "gitlab.com/.../electronic_labbook_database",
+      "commit": "f4e5d6a",
+      "path": "notebooks/SORVI/01_compute_tractions.ipynb"
+    },
+    "params": {"pixel_size": 0.65},
+    "inputs": {
+      "SORVI-01/raw/beadstack.tif": "sha256:9f86d08..."
+    }
+  },
+  "curated_artifact": {
+    "tool": "napari manual segmentation",
+    "data_repo_commit": "f4e5d6a",
+    "path": "notebooks/SORVI/curated/01_segmentation.tif"
+  }
+}
+```
+
+SDGL's role for committed code shifts from sole integrity layer to live
+verification: it confirms the working copy on disk still matches the committed
+version. The repo is the vault; SDGL is the guard.
+
+**Workflow:** write the notebook on the filesystem inside `CODE-NN/analysis/`
+(where you naturally work) → when the analysis is done, commit it to the data
+repo → `stamp()` records the provenance entry in SDGL → SDGL sights the
+filesystem copy and can verify it matches what was committed.
 
 ## Phase F — Sharing  ·  _last, per decision_
 
@@ -367,6 +456,25 @@ acceptance criteria**, not re-derive them:
   rebuild reaches feature parity, then cut over. New feature work is **frozen on
   the old repo** to avoid double-porting; backlog features are built once on the
   clean base.
+- **Analysis code must be committed** — SDGL is a witness (detects change), not
+  a vault (cannot recover). Code that produces derived artifacts must live in a
+  remote git repo: reusable library → public repo (`eln/analysis/`),
+  experiment-specific notebooks → private data repo (`notebooks/CODE/`). The
+  filesystem copy is the working copy; the repo is the durable copy; SDGL
+  verifies they match.
+- **Provenance stamps carry references, not code** — derived files embed commit
+  hashes, function names, parameters, and input hashes. Never source code, never
+  anything executable. Embedding code normalizes the expectation that data files
+  contain code and invites tooling that eventually evaluates it.
+- **Three artifact categories** — raw data (immutable, filesystem + backup,
+  too large for git), curated artifacts (irreproducible but mutable — hand-drawn
+  segmentations, manual ROIs, curated tracking; committed to the data repo like
+  notebooks; git provides history, recoverability, and guilt-free deletion), and
+  derived data (regenerable, disposable, filesystem only, provenance in SDGL).
+  The general rule: **if it can't be regenerated from code + inputs, it gets
+  committed.** Curated artifacts are not sacred like raw data — they can be
+  refined, discarded, and redone — but they can't be regenerated, so they need
+  version control, not just backup.
 
 ## Deferred / won't do
 
@@ -401,8 +509,9 @@ building the wrong thing.
 
 Phases A–B are **done** (steps 1–6: repos, diffable DB, history reconstruction,
 SDGL engine, generators, Flask server + publish). **Step 7** — the unified
-`labbook` CLI (serve/scan/regenerate/rebuild/publish/backup) — is essentially done;
-`labbook backup` launches into step 8. Next: **Step 8, the backup tool**
-(selectable data copy). Then Phase D — the presentations plugin (step 9), the
-one-time data migration (step 9b), and the feature backlog (step 10). Sharing
-(Phase F) is intentionally last.
+`labbook` CLI (serve/scan/regenerate/rebuild/publish/backup) is done, and
+**step 8** — the backup tool (selectable data copy) — is done: `labbook backup`
+launches the explorer with per-row checkboxes, a content-hash-deduped preview,
+conflict resolution, and live progress. Next: **Phase D — the presentations
+plugin (step 9)**, then the one-time data migration (step 9b) and the feature
+backlog (step 10). Sharing (Phase F) is intentionally last.
