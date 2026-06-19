@@ -9,8 +9,8 @@
 *.db-shm
 *.backup-*
 
-# Local SDGL config (ship sdgl.toml.example; users copy it to sdgl.toml)
-sdgl.toml
+# Local unified config (ship labbook.toml.example; users copy it to labbook.toml)
+labbook.toml
 
 # Generated static catalog pages (produced by the generators at build time).
 # Static frontend assets that happen to be .html (templates, admin, graph view)

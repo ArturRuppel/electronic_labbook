@@ -1,0 +1,15 @@
+# labbook.toml — copy this to labbook.toml (gitignored) and edit for your machine.
+# This single file replaces the old data-repo sdgl.toml and adds data_root.
+
+# Absolute path to the data repo (holds experiments.sql, reports/, ...).
+data_root = "/abs/path/to/data-repo"
+
+[scanner]
+run_on_startup = false
+daily_scan = false
+
+# Directories SDGL scans for raw/derived files. Relative paths resolve against
+# data_root; absolute paths (e.g. external acquisition drives) are used as-is.
+[[scan_roots]]
+name = "data"
+path = "data"
