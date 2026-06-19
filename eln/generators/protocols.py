@@ -11,6 +11,8 @@ import re
 import sqlite3
 from pathlib import Path
 
+from eln.generators.nav import render_nav
+
 DEFAULT_DB_NAME = "experiments.db"
 
 
@@ -280,13 +282,7 @@ PROTOCOLS_HTML_TEMPLATE = """<!DOCTYPE html>
         <p>Versioned protocols for spheroid experiments</p>
     </div>
 
-    <div class="nav">
-        <a href="/">Data Graph</a>
-        <a href="experiments.html">Experiments</a>
-        <a href="protocols.html">Protocols</a>
-        <a href="reports.html">Reports</a>
-        <a href="presentations.html">Presentations</a>
-    </div>
+    {nav}
 
     <div class="container">
         <div class="protocol-list">
@@ -360,10 +356,11 @@ PROTOCOLS_HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def generate_protocol_catalog(root, catalog_out=None):
+def generate_protocol_catalog(root, catalog_out=None, plugins=None):
     """Generate ``protocols.html`` from the notebook DB under *root*.
 
     Output is written to *catalog_out* (default ``root/catalog``).
+    *plugins* (default: discovered) supply extra nav links.
     """
     root = Path(root)
     database_path = root / DEFAULT_DB_NAME
@@ -451,6 +448,7 @@ def generate_protocol_catalog(root, catalog_out=None):
 
     # Generate final HTML
     html = PROTOCOLS_HTML_TEMPLATE.format(
+        nav=render_nav(plugins),
         protocols_html=protocols_html,
         protocols_json=protocols_json,
     )

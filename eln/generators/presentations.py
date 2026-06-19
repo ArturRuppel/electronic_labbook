@@ -9,6 +9,8 @@ import argparse
 import re
 from pathlib import Path
 
+from eln.generators.nav import render_nav
+
 
 def parse_presentation_dir(dirname):
     """Extract date and title from directory name like '2026-01-21_QBio_seminar_Pasteur'."""
@@ -98,13 +100,7 @@ def generate_presentations(root, catalog_out=None):
         <p>Slide decks and seminar talks</p>
     </div>
 
-    <div class="nav">
-        <a href="/">Data Graph</a>
-        <a href="experiments.html">Experiments</a>
-        <a href="protocols.html">Protocols</a>
-        <a href="reports.html">Reports</a>
-        <a href="presentations.html">Presentations</a>
-    </div>
+    {render_nav()}
 
     <div class="container">
         <div class="stats">

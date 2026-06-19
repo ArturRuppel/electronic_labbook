@@ -15,6 +15,7 @@ from pathlib import Path
 
 from eln.sdgl import format_experiment_id
 from eln.generators.catalog import get_experiment_date_from_files
+from eln.generators.nav import render_nav
 
 DEFAULT_DB_NAME = "experiments.db"
 DEFAULT_SDGL_DB_NAME = "sdgl.db"
@@ -355,13 +356,7 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
         <p>Experimental documentation and updates</p>
     </div>
 
-    <div class="nav">
-        <a href="/">Data Graph</a>
-        <a href="experiments.html">Experiments</a>
-        <a href="protocols.html">Protocols</a>
-        <a href="reports.html">Reports</a>
-        <a href="presentations.html">Presentations</a>
-    </div>
+    {nav}
 
     <div class="container">
         <div class="reports-list">
@@ -586,11 +581,12 @@ def extract_report_date(content, report_file):
     return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
 
 
-def generate_reports(root, catalog_out=None):
+def generate_reports(root, catalog_out=None, plugins=None):
     """Generate ``reports.html`` from markdown reports under *root*.
 
     *root* is the data-repo directory holding ``reports/``, ``experiments.db`` and
     the optional ``sdgl.db``. Output is written to *catalog_out* (default ``root/catalog``).
+    *plugins* (default: discovered) supply extra nav links.
     """
     root = Path(root)
     reports_dir = root / "reports"
@@ -684,6 +680,7 @@ def generate_reports(root, catalog_out=None):
 
     # Generate final HTML
     html = REPORTS_HTML_TEMPLATE.format(
+        nav=render_nav(plugins),
         reports_html=reports_html,
     )
 

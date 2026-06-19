@@ -12,6 +12,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from eln.generators.nav import render_nav
 from eln.sdgl import allocate_experiment_codes, format_experiment_id
 
 DEFAULT_DB_NAME = "experiments.db"
@@ -298,13 +299,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <p>Microscopy experiments and documentation</p>
     </div>
 
-    <div class="nav">
-        <a href="/">Data Graph</a>
-        <a href="experiments.html">Experiments</a>
-        <a href="protocols.html">Protocols</a>
-        <a href="reports.html">Reports</a>
-        <a href="presentations.html">Presentations</a>
-    </div>
+    {nav}
 
     <div class="container">
         <div class="stats">
@@ -434,11 +429,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def generate_catalog(root, catalog_out=None):
+def generate_catalog(root, catalog_out=None, plugins=None):
     """Generate ``experiments.html`` from the notebook DB under *root*.
 
     *root* is the data-repo directory holding ``experiments.db`` and the optional
     ``sdgl.db``. Output is written to *catalog_out* (default ``root/catalog``).
+    *plugins* (default: discovered) supply extra nav links.
     """
     root = Path(root)
     database_path = root / DEFAULT_DB_NAME
@@ -649,6 +645,7 @@ def generate_catalog(root, catalog_out=None):
 
     # Generate final HTML
     html = HTML_TEMPLATE.format(
+        nav=render_nav(plugins),
         total_experiments=total_experiments,
         date_range=date_range,
         experiments_html='\n'.join(experiments_html),
