@@ -128,33 +128,28 @@ PROTOCOLS_HTML_TEMPLATE = """<!DOCTYPE html>
             text-decoration: underline;
         }}
         .container {{
-            max-width: 1200px;
+            max-width: 1000px;
             margin: 0 auto;
             padding: 1.5rem;
         }}
         .protocol-list {{
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }}
+        .protocol-group {{
             background: white;
             border: 1px solid #d7dde2;
             border-radius: 8px;
-            padding: 1.5rem;
-        }}
-        .protocol-group {{
-            margin-bottom: 1.5rem;
-            padding: 1.5rem;
-            border: 1px solid #d7dde2;
-            background: #f9fbfc;
-            border-radius: 8px;
-        }}
-        .protocol-group:last-child {{
-            border-bottom: none;
+            margin-bottom: 1rem;
+            overflow: hidden;
         }}
         .protocol-header {{
             display: flex;
             justify-content: space-between;
             align-items: center;
             cursor: pointer;
-            padding: 0.5rem;
-            border-radius: 4px;
+            padding: 1rem 1.5rem;
             transition: background-color 0.2s;
         }}
         .protocol-header:hover {{
@@ -166,6 +161,7 @@ PROTOCOLS_HTML_TEMPLATE = """<!DOCTYPE html>
             color: #24313d;
             display: flex;
             align-items: center;
+            gap: 1rem;
         }}
         .expand-icon {{
             display: inline-block;
@@ -176,9 +172,9 @@ PROTOCOLS_HTML_TEMPLATE = """<!DOCTYPE html>
         }}
         .protocol-details {{
             display: none;
-            margin-top: 1rem;
-            padding-top: 1rem;
+            padding: 1rem 1.5rem 1.5rem 1.5rem;
             border-top: 1px solid #e0e5e9;
+            margin: 0 1rem;
         }}
         .latest-badge {{
             background: #e5efe9;
@@ -207,10 +203,6 @@ PROTOCOLS_HTML_TEMPLATE = """<!DOCTYPE html>
             font-size: 0.95rem;
         }}
         .protocol-content {{
-            background: #f9fbfc;
-            padding: 1.5rem;
-            border-radius: 4px;
-            border-left: 4px solid #2d6f9f;
             margin-top: 1rem;
             line-height: 1.8;
         }}

@@ -111,7 +111,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             text-decoration: underline;
         }}
         .container {{
-            max-width: 1400px;
+            max-width: 1760px;
             margin: 0 auto;
             padding: 1.5rem;
         }}
@@ -167,6 +167,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }}
         table {{
             width: 100%;
+            min-width: 1100px;
             border-collapse: collapse;
             font-size: 0.92rem;
             table-layout: fixed;
@@ -174,15 +175,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         th[data-column="thumbnail"] {{ width: 6%; }}
         th[data-column="experiment_id"] {{ width: 7%; }}
         .exp-id {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 650; color: #2b5878; white-space: nowrap; }}
-        th[data-column="experiment_type"] {{ width: 11%; }}
-        th[data-column="date"] {{ width: 7%; }}
-        th[data-column="sample"] {{ width: 8%; }}
-        th[data-column="cell_types"] {{ width: 10%; }}
-        th[data-column="microscope"] {{ width: 11%; }}
-        th[data-column="channels"] {{ width: 11%; }}
-        th[data-column="protocol"] {{ width: 10%; }}
+        th[data-column="experiment_type"] {{ width: 10%; }}
+        th[data-column="date"] {{ width: 6%; }}
+        th[data-column="sample"] {{ width: 6%; }}
+        th[data-column="cell_types"] {{ width: 11%; }}
+        th[data-column="microscope"] {{ width: 10%; }}
+        th[data-column="channels"] {{ width: 12%; }}
+        th[data-column="protocol"] {{ width: 9%; }}
         th[data-column="tags"] {{ width: 9%; }}
-        th[data-column="comments"] {{ width: 17%; }}
+        th[data-column="comments"] {{ width: 14%; }}
         th {{
             background: #f3f6f8;
             color: #53616d;
@@ -256,12 +257,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }}
         .tag-chip {{
             display: inline-block;
-            border-radius: 999px;
+            max-width: 100%;
+            border-radius: 12px;
             background: #e5edf4;
+            line-height: 1.35;
             color: #2b5878;
             font-size: 0.75rem;
             font-weight: 600;
             padding: 0.1rem 0.5rem;
+            overflow-wrap: anywhere;
         }}
         .thumb-link {{
             display: inline-block;

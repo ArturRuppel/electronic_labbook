@@ -267,8 +267,11 @@ step 3** — this is the binary/source-file corpus that lives in the data repo:
   timestamp churn) and no broken relative / `file://` links.
 
 ### 10. Feature / polish backlog  ·  port/build once, here
-- **B — Catalog visual polish** (M): experiment-overview layout (clipping, full
-  width, responsive columns); protocols page styled to match the reports page.
+- **B — Catalog visual polish** (M) — _done_: experiment-overview layout
+  (chip wrapping fixes the clipping; column widths rebalanced to 100%; wider
+  1760px container + `min-width` table that scrolls instead of crushing on
+  narrow viewports); protocols page restyled as individual cards in a 1000px
+  container to match the reports page.
 - **D — Field history + channel fungibility** (M–L): datalist autocomplete from
   new distinct-value endpoints; treat fungible channels as equivalent
   (e.g. "GFP" = "488" = "FITC" when configured).
