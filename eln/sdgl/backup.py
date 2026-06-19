@@ -35,3 +35,52 @@ def dest_subpath(node_id):
         return Path(suffix) / f"{suffix}_aggregate"
     code = suffix.split("-", 1)[0]
     return Path(code) / suffix
+
+
+def resolve_logical_files(conn, selections):
+    """Map each ``{node_id, rel_path}`` selection to its file rows.
+
+    Returns ``{(node_id, rel_path): [row, ...]}`` over file rows only (is_dir=0),
+    deduped by ``location.id`` so overlapping selections never double-count a
+    physical copy. ``rel_path == ''`` selects the whole node; a folder rel_path
+    selects its subtree; a file rel_path selects exactly that file.
+    """
+    logical = {}
+    for sel in selections:
+        node_id = sel["node_id"]
+        prefix = sel.get("rel_path") or ""
+        rows = conn.execute(
+            "SELECT * FROM file_locations WHERE node_id = ? AND is_dir = 0",
+            (node_id,),
+        ).fetchall()
+        for row in rows:
+            rel = row["rel_path"] or ""
+            if prefix and not (rel == prefix or rel.startswith(prefix + os.sep)):
+                continue
+            by_id = logical.setdefault((node_id, rel), {})
+            by_id[row["id"]] = row
+    return {key: list(by_id.values()) for key, by_id in logical.items()}
+
+
+def classify(copies):
+    """Decide how to back up one logical file given its physical copies.
+
+    Returns one of:
+      {"status": "ok", "chosen": row}           — copy this row
+      {"status": "missing"}                       — no copy exists on disk
+      {"status": "conflict", "copies": [rows]}    — copies differ; user must pick
+    Identical-content duplicates collapse silently (newest mtime wins, matching
+    the tree's dedup); only same-rel-path copies with differing content conflict.
+    """
+    existing = [c for c in copies if c["exists_now"] and Path(c["path"]).exists()]
+    if not existing:
+        return {"status": "missing"}
+    if len(existing) == 1:
+        return {"status": "ok", "chosen": existing[0]}
+    by_hash = {}
+    for copy in existing:
+        by_hash.setdefault(hash_file(copy["path"]), []).append(copy)
+    if len(by_hash) == 1:
+        chosen = max(existing, key=lambda c: c["mtime"] or 0)
+        return {"status": "ok", "chosen": chosen}
+    return {"status": "conflict", "copies": existing}
