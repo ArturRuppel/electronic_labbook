@@ -3,11 +3,13 @@
 **Roadmap step 6.** Ported from the original `api_server.py` + `catalog/` overlay.
 
 `create_app(root)` builds the local Flask app bound to a **data-repo root** (the
-same root the generators and SDGL use). Run it with:
+same root the generators and SDGL use). Run it with the unified CLI:
 
 ```bash
-python -m eln.server DATA_REPO_ROOT [--port 5000] [--no-scan]
+labbook admin [--port 5000] [--scan] [--no-browser]
 ```
+
+(The data-repo root comes from `labbook.toml` / `ELN_ROOT` / `--root`.)
 
 The server is **local-only and unauthenticated by design**.
 

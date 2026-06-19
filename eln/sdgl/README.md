@@ -4,7 +4,7 @@
 
 Lands here (ported from the original `sdgl.py`):
 
-- Scan of configured roots from `sdgl.toml`.
+- Scan of configured roots from the unified `labbook.toml`.
 - The naming grammar: folders named exactly `CODE-NN` where the 5-character
   `CODE` is the experiment series and `NN` the repetition, with an `X` flag for
   excluded sessions (`SORVI-01`, `COV2D-X03`), and bare `CODE` folders for

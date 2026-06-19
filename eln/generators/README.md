@@ -22,8 +22,7 @@ static HTML page into `root/catalog` (or an explicit `catalog_out`):
 ## Usage
 
 ```bash
-python -m eln.generators DATA_REPO_ROOT          # run all five
-python -m eln.generators.catalog DATA_REPO_ROOT  # or one at a time
+labbook regenerate          # run all five (DB -> catalog HTML)
 ```
 
 Or from Python: `from eln.generators import generate_all; generate_all(root)`.

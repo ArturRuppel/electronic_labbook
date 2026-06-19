@@ -307,45 +307,6 @@ def allocate_experiment_codes(db_path):
     conn.close()
 
 
-def parse_sdgl_toml(path):
-    """Parse the small sdgl.toml subset used for scan_roots."""
-    config = {"scanner": {}, "scan_roots": []}
-    toml_path = Path(path)
-    if not toml_path.exists():
-        return config
-
-    current = None
-    current_root = None
-    for raw_line in toml_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        if line == "[scanner]":
-            current = "scanner"
-            current_root = None
-            continue
-        if line == "[[scan_roots]]":
-            current = "scan_roots"
-            current_root = {}
-            config["scan_roots"].append(current_root)
-            continue
-        if "=" not in line:
-            continue
-        key, value = [part.strip() for part in line.split("=", 1)]
-        value = value.strip()
-        if value.startswith('"') and value.endswith('"'):
-            parsed = value[1:-1]
-        elif value.lower() in {"true", "false"}:
-            parsed = value.lower() == "true"
-        else:
-            parsed = value
-        if current == "scanner":
-            config["scanner"][key] = parsed
-        elif current == "scan_roots" and current_root is not None:
-            current_root[key] = parsed
-    return config
-
-
 class SDGL:
     def __init__(self, root_path, eln_db_path=None, sdgl_db_path=None):
         self.root_path = Path(root_path)
@@ -1528,7 +1489,8 @@ def update_labbook(root_path=None, verbose=True, list_paths=False):
     the SDGL database with recognized experiment folders.
 
     Args:
-        root_path: Root directory containing experiments.db and sdgl.toml.
+        root_path: Data-repo root (holds experiments.db); scan roots come from
+            the unified labbook.toml.
                    If None, uses the current working directory.
         verbose: If True, print progress information (items found, updated, errors).
         list_paths: If True, print all recognized experiment folder paths.

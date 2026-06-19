@@ -62,7 +62,7 @@ stays private**, and so that **no binary database is ever committed**.
 | Schema/migrations, `dump_db.py` / `rebuild_db.py` | ✅ | — |
 | Generators, Flask server, SDGL engine, plugin API, overlay/admin | ✅ | — |
 | Synthetic sample dataset (runs out-of-the-box) | ✅ | — |
-| `sdgl.toml` | `sdgl.toml.example` (placeholder paths) | real (absolute paths) |
+| `labbook.toml` (unified config: `data_root` + scan roots) | `labbook.toml.example` template + gitignored real `labbook.toml` | — |
 | LICENSE, README | ✅ | — |
 | `experiments.sql` (diffable DB dump) | — | ✅ |
 | `reports/`, `protocols/`, presentation slides | — | ✅ |
@@ -84,7 +84,7 @@ electronic_labbook/
 ├── README.md
 ├── pyproject.toml
 ├── requirements.txt
-├── sdgl.toml.example        # config template — copy to sdgl.toml (gitignored) and edit
+├── labbook.toml.example     # config template — copy to labbook.toml (gitignored) and edit
 ├── eln/                     # the Python package
 │   ├── db/                  # schema, migrations, dump_db.py / rebuild_db.py
 │   ├── sdgl/                # the SDGL scan engine + naming grammar

@@ -13,7 +13,6 @@ from .engine import (
     format_experiment_id,
     parse_code_folder,
     parse_id_folder,
-    parse_sdgl_toml,
     update_labbook,
 )
 
@@ -26,6 +25,5 @@ __all__ = [
     "format_experiment_id",
     "parse_code_folder",
     "parse_id_folder",
-    "parse_sdgl_toml",
     "update_labbook",
 ]
