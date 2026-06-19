@@ -32,6 +32,7 @@ from eln.sdgl import (
     SDGL,
     allocate_experiment_codes,
     format_experiment_id,
+    hashing_options,
 )
 from eln.sdgl.backup import BackupJob, plan_backup, run_backup
 from eln.server import publish as publish_mod
@@ -67,13 +68,15 @@ _AUTH_SCRIPT_RE = re.compile(r'<script\s+src=["\']auth\.js["\']\s*>\s*</script>'
 
 
 def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
-               scan_roots=None, channel_aliases=None):
+               scan_roots=None, channel_aliases=None, scanner=None):
     """Build the Flask app bound to data-repo ``root``.
 
     ``scan_roots`` is the injected list of scan-root configs (from the unified
     ``labbook.toml``); the scan route uses it instead of reading a per-repo file.
     ``channel_aliases`` is the list of channel equivalence groups (also from the
     config); it drives fungible-marker collapsing in the field-values endpoint.
+    ``scanner`` is the ``[scanner]`` config table; it supplies the content-hashing
+    settings used by the scan route and background scan (Roadmap step 11).
     """
     root = Path(root)
     database_path = Path(eln_db_path) if eln_db_path else root / "experiments.db"
@@ -91,6 +94,9 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     plugins = discover_plugins()
     # Configured scan roots plus any a plugin contributes (scan-root extension point).
     app.config["SCAN_ROOTS"] = effective_scan_roots(scan_roots, root, plugins)
+    content_hash, hash_max_bytes = hashing_options(scanner)
+    app.config["CONTENT_HASHING"] = content_hash
+    app.config["HASH_MAX_BYTES"] = hash_max_bytes
     generated_pages = CORE_GENERATED_PAGES | {
         p.nav.href for p in plugins if p.nav and p.nav.href.endswith(".html")
     }
@@ -276,10 +282,19 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         roots = data.get("roots")
         if roots is None:
             roots = app.config["SCAN_ROOTS"]
-        result = get_sdgl().scan_roots(roots)
+        result = get_sdgl().scan_roots(
+            roots,
+            content_hash=app.config["CONTENT_HASHING"],
+            hash_max_bytes=app.config["HASH_MAX_BYTES"],
+        )
         if not roots:
             result["message"] = "No scan roots configured"
         return jsonify(result)
+
+    @app.route("/api/sdgl/verify-hashes", methods=["POST"])
+    def sdgl_verify_hashes():
+        node_id = (request.json or {}).get("node_id")
+        return jsonify(get_sdgl().verify_hashes(node_id))
 
     @app.route("/api/sdgl/scan/unmatched", methods=["GET"])
     def sdgl_scan_unmatched():
@@ -853,7 +868,11 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
 
         def run_scan():
             try:
-                get_sdgl().scan_roots(roots)
+                get_sdgl().scan_roots(
+                    roots,
+                    content_hash=app.config["CONTENT_HASHING"],
+                    hash_max_bytes=app.config["HASH_MAX_BYTES"],
+                )
             except Exception as e:  # noqa: BLE001
                 print(f"SDGL startup scan failed: {e}")
 

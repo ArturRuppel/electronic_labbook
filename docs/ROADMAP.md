@@ -537,6 +537,10 @@ third-party entry points, with presentations re-expressed entirely as a plugin.
 **Step 9b** — the one-time data migration against the settled plugin layout — is
 done, as are the feature-backlog items **10B** (catalog visual polish), **10D**
 (field-history autocomplete + channel fungibility), and **10b** (the analysis
-library + provenance stamps). Next: the compliance layer (step 11) — content
-hashing → hash-chained audit log → trusted timestamps. Sharing (Phase F) is
-intentionally last.
+library + provenance stamps). **Step 11, layer 1** — content hashing on scan — is
+done: an opt-in `[scanner].content_hashing` flag stores a `sha256:` per file in
+the SDGL `file_locations` table, recomputed only when size/mtime drift; `labbook
+scan --hash` forces it for one run and `labbook verify` (and `POST
+/api/sdgl/verify-hashes`) recomputes hashes to flag corruption or tampering.
+Next on the compliance layer (step 11): the hash-chained audit log, then RFC 3161
+trusted timestamps. Sharing (Phase F) is intentionally last.

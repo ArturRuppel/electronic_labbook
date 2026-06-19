@@ -7,6 +7,15 @@ data_root = "/abs/path/to/data-repo"
 [scanner]
 run_on_startup = false
 daily_scan = false
+# Content hashing (Roadmap step 11): store a SHA-256 per file on scan for
+# tamper-evidence and duplicate detection. Opt-in, because the first pass over a
+# large raw corpus can be slow; afterwards a file is only re-hashed when its
+# size or mtime changes. `labbook scan --hash` forces it on for one run, and
+# `labbook verify` recomputes hashes to flag any drift.
+content_hashing = false
+# Optional ceiling in bytes; files larger than this are left unhashed so the
+# first pass over multi-GB acquisitions stays bounded. Omit for no limit.
+# hash_max_bytes = 5_000_000_000
 
 # Directories SDGL scans for raw/derived files. Relative paths resolve against
 # data_root; absolute paths (e.g. external acquisition drives) are used as-is.

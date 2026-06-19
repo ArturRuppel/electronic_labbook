@@ -25,6 +25,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from eln.hashing import sha256_file
+
 
 # Legacy AA00-style public UID. Retired as the node id (CODE-NN replaces it) but
 # the column and allocator linger until the DB is tidied out manually.
@@ -307,6 +309,18 @@ def allocate_experiment_codes(db_path):
     conn.close()
 
 
+def hashing_options(scanner):
+    """Pull content-hashing settings out of a ``[scanner]`` config dict.
+
+    Returns ``(content_hash, hash_max_bytes)``. Hashing is opt-in
+    (``content_hashing = true``) so that turning on a first, potentially
+    expensive pass over a large raw corpus is always a deliberate choice.
+    ``hash_max_bytes`` is an optional ceiling to keep that pass bounded.
+    """
+    scanner = scanner or {}
+    return bool(scanner.get("content_hashing")), scanner.get("hash_max_bytes")
+
+
 class SDGL:
     def __init__(self, root_path, eln_db_path=None, sdgl_db_path=None):
         self.root_path = Path(root_path)
@@ -374,17 +388,26 @@ class SDGL:
                 first_seen_at TEXT,
                 last_seen_at TEXT,
                 exists_now INTEGER,
-                metadata TEXT
+                metadata TEXT,
+                content_hash TEXT,
+                hashed_size INTEGER,
+                hashed_mtime REAL,
+                hashed_at TEXT
             )
             """
         )
-        # Self-heal older sdgl.db files that predate the scan-by-ID columns.
+        # Self-heal older sdgl.db files that predate the scan-by-ID and
+        # content-hashing columns (Roadmap step 11, layer 1).
         existing_cols = {row[1] for row in cursor.execute("PRAGMA table_info(file_locations)")}
         for column, decl in (
             ("rel_path", "TEXT"),
             ("size", "INTEGER"),
             ("mtime", "REAL"),
             ("is_dir", "INTEGER"),
+            ("content_hash", "TEXT"),
+            ("hashed_size", "INTEGER"),
+            ("hashed_mtime", "REAL"),
+            ("hashed_at", "TEXT"),
         ):
             if column not in existing_cols:
                 cursor.execute(f"ALTER TABLE file_locations ADD COLUMN {column} {decl}")
@@ -410,6 +433,7 @@ class SDGL:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_edges_relation ON edges(relation_type)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_locations_node ON file_locations(node_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_locations_path ON file_locations(path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_locations_hash ON file_locations(content_hash)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_scan_findings_status ON scan_findings(status)")
         conn.commit()
         conn.close()
@@ -714,26 +738,41 @@ class SDGL:
 
     def upsert_location(self, node_id, root_name, path, role, qualifier="",
                         rel_path="", size=None, mtime=None, is_dir=0,
-                        metadata=None, conn=None):
+                        metadata=None, conn=None, hash_path=None,
+                        hash_max_bytes=None):
+        """Record a file sighting. When ``hash_path`` is given and the entry is a
+        file, a SHA-256 content hash is stored (Roadmap step 11, layer 1). The
+        hash is recomputed only when the file is new or its size/mtime changed
+        since it was last hashed, so re-scans of an unchanged corpus do no I/O.
+        When ``hash_path`` is ``None`` any previously stored hash is preserved."""
         owns_conn = conn is None
         conn = conn or self.connect()
         location_id = "location:" + stable_hash(root_name or "", os.path.abspath(path))
         now = utcnow()
         try:
             existing = conn.execute(
-                "SELECT id FROM file_locations WHERE id = ?", (location_id,)
+                "SELECT content_hash, hashed_size, hashed_mtime, hashed_at "
+                "FROM file_locations WHERE id = ?", (location_id,)
             ).fetchone()
+            content_hash, hashed_size, hashed_mtime, hashed_at = (
+                self._resolve_content_hash(
+                    existing, hash_path if not is_dir else None,
+                    size, mtime, hash_max_bytes, now)
+            )
             if existing:
                 conn.execute(
                     """
                     UPDATE file_locations
                     SET node_id = ?, role = ?, qualifier = ?, rel_path = ?,
                         size = ?, mtime = ?, is_dir = ?, last_seen_at = ?,
-                        exists_now = 1, metadata = ?
+                        exists_now = 1, metadata = ?,
+                        content_hash = ?, hashed_size = ?, hashed_mtime = ?,
+                        hashed_at = ?
                     WHERE id = ?
                     """,
                     (node_id, role, qualifier, rel_path, size, mtime, is_dir,
-                     now, json_dumps(metadata), location_id),
+                     now, json_dumps(metadata), content_hash, hashed_size,
+                     hashed_mtime, hashed_at, location_id),
                 )
             else:
                 conn.execute(
@@ -741,12 +780,14 @@ class SDGL:
                     INSERT INTO file_locations (
                         id, node_id, root_name, path, role, qualifier,
                         rel_path, size, mtime, is_dir,
-                        first_seen_at, last_seen_at, exists_now, metadata
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                        first_seen_at, last_seen_at, exists_now, metadata,
+                        content_hash, hashed_size, hashed_mtime, hashed_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
                     """,
                     (location_id, node_id, root_name, os.path.abspath(path), role,
                      qualifier, rel_path, size, mtime, is_dir, now, now,
-                     json_dumps(metadata)),
+                     json_dumps(metadata), content_hash, hashed_size,
+                     hashed_mtime, hashed_at),
                 )
             if owns_conn:
                 conn.commit()
@@ -754,6 +795,29 @@ class SDGL:
             if owns_conn:
                 conn.close()
         return location_id
+
+    @staticmethod
+    def _resolve_content_hash(existing, hash_path, size, mtime, hash_max_bytes, now):
+        """Return the ``(content_hash, hashed_size, hashed_mtime, hashed_at)``
+        tuple to store. Reuses the existing hash when size+mtime are unchanged,
+        recomputes when they drift, and carries the prior hash forward untouched
+        when hashing is not requested for this sighting."""
+        prior = (
+            (existing["content_hash"], existing["hashed_size"],
+             existing["hashed_mtime"], existing["hashed_at"])
+            if existing else (None, None, None, None)
+        )
+        if not hash_path:
+            return prior  # hashing disabled here — never erase a stored hash
+        if prior[0] and prior[1] == size and prior[2] == mtime:
+            return prior  # unchanged since last hashed — skip the re-read
+        if hash_max_bytes is not None and size is not None and size > hash_max_bytes:
+            return prior  # too large to hash under the configured cap
+        try:
+            digest = sha256_file(hash_path)
+        except OSError:
+            return prior  # unreadable (permissions, vanished mid-scan)
+        return digest, size, mtime, now
 
     def upsert_finding(self, status, root_name, path, name=None, suggestion=None, metadata=None, exists_now=1, conn=None):
         owns_conn = conn is None
@@ -793,15 +857,25 @@ class SDGL:
         from eln.config import load_config
 
         config = load_config(config_path, root_override=str(self.root_path))
-        return self.scan_roots(config.scan_roots)
+        content_hash, hash_max_bytes = hashing_options(config.scanner)
+        return self.scan_roots(
+            config.scan_roots, content_hash=content_hash,
+            hash_max_bytes=hash_max_bytes,
+        )
 
-    def scan_roots(self, roots, list_paths=False, progress=None):
+    def scan_roots(self, roots, list_paths=False, progress=None,
+                   content_hash=False, hash_max_bytes=None):
         """Discover CODE-NN folders across the given roots and index their
-        subtree metadata (names, sizes, mtimes — never contents).
+        subtree metadata (names, sizes, mtimes — and, when ``content_hash`` is
+        set, a SHA-256 per file for tamper-evidence and dedup).
 
         Args:
             roots: List of scan root configurations.
             list_paths: If True, return recognized paths in the summary.
+            content_hash: If True, store/refresh a SHA-256 per file (Roadmap
+                step 11, layer 1). Recomputed only when size/mtime drift.
+            hash_max_bytes: Optional ceiling; files larger than this are left
+                unhashed (keeps a first pass over huge raw corpora bounded).
         """
         self.sync_eln()
         summary = {"recognized": 0, "unmatched": 0, "aggregates": 0,
@@ -844,7 +918,8 @@ class SDGL:
                                     {"code": code, "kind": "aggregate"}, conn=conn,
                                 )
                                 self._index_id_folder(
-                                    node_id, root_name, folder, conn, seen_paths
+                                    node_id, root_name, folder, conn, seen_paths,
+                                    content_hash, hash_max_bytes,
                                 )
                                 self.upsert_finding(
                                     "recognized", root_name, str(folder), name=dirname,
@@ -860,7 +935,8 @@ class SDGL:
                         exp_id = known.get((parsed["code"], parsed["rep"], parsed["excluded"]))
                         if exp_id:
                             self._index_id_folder(
-                                "experiment:" + exp_id, root_name, folder, conn, seen_paths
+                                "experiment:" + exp_id, root_name, folder, conn, seen_paths,
+                                content_hash, hash_max_bytes,
                             )
                             self.upsert_finding(
                                 "recognized", root_name, str(folder), name=dirname,
@@ -1030,9 +1106,52 @@ class SDGL:
         """True when any path component is a `raw` subtree (merged silently)."""
         return "raw" in Path(rel_path).parts if rel_path else False
 
-    def _index_id_folder(self, node_id, root_name, folder, conn, seen_paths):
+    def verify_hashes(self, node_id=None):
+        """Recompute the SHA-256 of every hashed file location and compare it to
+        the stored hash — the tamper-evidence half of Roadmap step 11, layer 1.
+
+        Returns ``{"checked", "ok", "mismatch": [...], "missing": [...]}``. A
+        *mismatch* means a file's contents diverged from the witnessed hash
+        (corruption or tampering); *missing* means the file is gone or
+        unreadable. Pass ``node_id`` to scope the check to one node.
+        """
+        conn = self.connect()
+        result = {"checked": 0, "ok": 0, "mismatch": [], "missing": []}
+        query = (
+            "SELECT node_id, path, rel_path, content_hash FROM file_locations "
+            "WHERE content_hash IS NOT NULL"
+        )
+        params = ()
+        if node_id:
+            query += " AND node_id = ?"
+            params = (node_id,)
+        try:
+            for row in conn.execute(query, params).fetchall():
+                result["checked"] += 1
+                entry = {"node_id": row["node_id"], "path": row["path"],
+                         "rel_path": row["rel_path"]}
+                if not os.path.exists(row["path"]):
+                    result["missing"].append(entry)
+                    continue
+                try:
+                    actual = sha256_file(row["path"])
+                except OSError:
+                    result["missing"].append(entry)
+                    continue
+                if actual == row["content_hash"]:
+                    result["ok"] += 1
+                else:
+                    result["mismatch"].append(
+                        {**entry, "stored": row["content_hash"], "actual": actual})
+        finally:
+            conn.close()
+        return result
+
+    def _index_id_folder(self, node_id, root_name, folder, conn, seen_paths,
+                         content_hash=False, hash_max_bytes=None):
         """Record the matched folder and every descendant as a file_location.
-        Metadata only: names, extensions, sizes, mtimes — never file contents."""
+        Metadata only — names, extensions, sizes, mtimes — plus, when
+        ``content_hash`` is set, a SHA-256 of each file's contents."""
         folder = Path(folder)
         base_stat = self._safe_stat(folder)
         seen_paths.add(os.path.abspath(str(folder)))
@@ -1062,6 +1181,8 @@ class SDGL:
                     is_dir=1 if is_dir else 0,
                     metadata={"name": name, "ext": entry.suffix.lower().lstrip(".")},
                     conn=conn,
+                    hash_path=(str(entry) if content_hash and not is_dir else None),
+                    hash_max_bytes=hash_max_bytes,
                 )
 
     def list_nodes(self):

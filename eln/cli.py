@@ -43,6 +43,7 @@ def cmd_admin(args):
         config.data_root,
         scan_roots=config.scan_roots,
         channel_aliases=config.channel_aliases,
+        scanner=config.scanner,
     )
     url = f"http://localhost:{args.port}/"
     print("=" * 50)
@@ -59,11 +60,13 @@ def cmd_admin(args):
 
 def cmd_scan(args):
     from eln.plugins import effective_scan_roots
-    from eln.sdgl import SDGL
+    from eln.sdgl import SDGL, hashing_options
 
     config = _load(args)
     sdgl = SDGL(config.data_root)
     roots = effective_scan_roots(config.scan_roots, config.data_root)
+    content_hash, hash_max_bytes = hashing_options(config.scanner)
+    content_hash = content_hash or bool(getattr(args, "hash", False))
 
     def report(event):
         if event.get("phase") == "root":
@@ -72,8 +75,26 @@ def cmd_scan(args):
             s = event.get("summary", {})
             print(f"  done: {s}")
 
-    sdgl.scan_roots(roots, progress=report)
+    if content_hash:
+        print("  content hashing: on")
+    sdgl.scan_roots(roots, progress=report, content_hash=content_hash,
+                    hash_max_bytes=hash_max_bytes)
     return 0
+
+
+def cmd_verify(args):
+    from eln.sdgl import SDGL
+
+    config = _load(args)
+    result = SDGL(config.data_root).verify_hashes()
+    print(f"  checked {result['checked']} hashed file(s): "
+          f"{result['ok']} ok, {len(result['mismatch'])} changed, "
+          f"{len(result['missing'])} missing")
+    for item in result["mismatch"]:
+        print(f"  CHANGED  {item['path']}")
+    for item in result["missing"]:
+        print(f"  MISSING  {item['path']}")
+    return 1 if (result["mismatch"] or result["missing"]) else 0
 
 
 def cmd_regenerate(args):
@@ -124,6 +145,7 @@ def cmd_backup(args):
         config.data_root,
         scan_roots=config.scan_roots,
         channel_aliases=config.channel_aliases,
+        scanner=config.scanner,
     )
     url = f"http://localhost:{args.port}/"
     print("=" * 50)
@@ -152,7 +174,12 @@ def build_parser():
     p.set_defaults(func=cmd_admin)
 
     p = sub.add_parser("scan", help="scan configured roots with live feedback")
+    p.add_argument("--hash", action="store_true",
+                   help="store a SHA-256 per file (overrides [scanner].content_hashing)")
     p.set_defaults(func=cmd_scan)
+
+    p = sub.add_parser("verify", help="recompute file hashes and report any drift")
+    p.set_defaults(func=cmd_verify)
 
     p = sub.add_parser("regenerate", help="DB -> catalog HTML")
     p.add_argument("--catalog-out", default=None)
