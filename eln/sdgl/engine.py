@@ -34,21 +34,22 @@ UID_RE = re.compile(r"^[A-Z]{2}[0-9]{2}$")
 # identifier built from it. The code is fixed-length and the repetition is
 # dash-delimited, so digits in the code stay unambiguous (TFM01-02 -> rep 2).
 CODE_RE = re.compile(r"^[A-Z0-9]{5}$")
-# A directory matches an experiment when its name is the CODE-NN id, optionally
-# followed by a separator (space, _ or -) and free text. The repetition is
-# matched numerically, so SPHIM-01 and SPHIM-01_growth match experiment rep 1
-# while SPHIM-010 parses as rep 10 (a different experiment, hence no match).
-# An optional X before the digits marks an excluded session (COV2D-X03), which
-# is numbered in its own per-family sequence independent of the active ones.
+# A directory matches an experiment when its name is EXACTLY the CODE-NN id — no
+# trailing tags. Downstream structure (raw/, analysis/, ...) comes from nesting
+# beneath the folder, e.g. SORVI-01/raw, not from the folder name. The repetition
+# is matched numerically, so SPHIM-01 is rep 1 while SPHIM-010 is rep 10 (a
+# different experiment). An optional X before the digits marks an excluded session
+# (COV2D-X03), numbered in its own per-family sequence independent of the active ones.
 ID_FOLDER_RE = re.compile(
-    r"^(?P<code>[A-Z0-9]{5})-(?P<excl>X?)(?P<rep>\d+)(?:[ _-].*)?$"
+    r"^(?P<code>[A-Z0-9]{5})-(?P<excl>X?)(?P<rep>\d+)$"
 )
 # A bare experiment-code folder (CODE with no -NN repetition) holds aggregate
-# analyses or other material spanning the whole experiment. The name shape alone
-# is ambiguous (NOTES, TOOLS, ADMIN all match [A-Z0-9]{5}), so a bare folder is
-# only ever recognized when its code is a known experiment code. The CODE-NN form
-# is matched first, so repetition folders never fall through to this pattern.
-CODE_FOLDER_RE = re.compile(r"^(?P<code>[A-Z0-9]{5})(?:[ _-].*)?$")
+# analyses or other material spanning the whole experiment. The name must be
+# exactly the 5-character code. The shape alone is ambiguous (NOTES, TOOLS, ADMIN
+# all match [A-Z0-9]{5}), so a bare folder is only ever recognized when its code is
+# a known experiment code. The CODE-NN form is matched first, so repetition folders
+# never fall through to this pattern.
+CODE_FOLDER_RE = re.compile(r"^(?P<code>[A-Z0-9]{5})$")
 
 CORE_NODE_TYPES = {
     "experiment",

@@ -15,18 +15,21 @@ from eln.sdgl import SDGL, format_experiment_id, parse_code_folder, parse_id_fol
 
 def test_parse_id_folder_active_and_excluded():
     assert parse_id_folder("TFMSP-01") == {"code": "TFMSP", "rep": 1, "excluded": False}
-    assert parse_id_folder("TFMSP-01_growth") == {"code": "TFMSP", "rep": 1, "excluded": False}
     assert parse_id_folder("COV2D-X03") == {"code": "COV2D", "rep": 3, "excluded": True}
     # SPHIM-010 is rep 10, a different experiment (not rep 1).
     assert parse_id_folder("SPHIM-010") == {"code": "SPHIM", "rep": 10, "excluded": False}
     assert parse_id_folder("NOTES") is None
+    # Exact names only — no trailing tags. Downstream structure comes from nesting.
+    assert parse_id_folder("TFMSP-01_growth") is None
+    assert parse_id_folder("TFMSP-01 extra") is None
 
 
 def test_parse_code_folder_only_bare_codes():
     assert parse_code_folder("TFMSP") == {"code": "TFMSP"}
-    assert parse_code_folder("TFMSP_aggregate") == {"code": "TFMSP"}
     # CODE-NN forms are NOT bare-code folders.
     assert parse_code_folder("TFMSP-01") is None
+    # Exact 5-char code only — no trailing tags.
+    assert parse_code_folder("TFMSP_aggregate") is None
 
 
 def test_format_experiment_id():

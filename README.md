@@ -21,10 +21,15 @@ already have, links it into a graph (experiment → protocol → analysis → re
 
 ### The differentiator: SDGL (Scientific Data Graph Layer)
 
-`SDGL` is a graph index layered over the notebook. It scans configured roots,
-recognizes a naming grammar (`AA00_raw`, `AA00_analysis_tfm`,
-`AA00+AB01_aggregate_analysis_…`), and records every filesystem sighting
-(size, mtime, existence) of every artifact.
+`SDGL` is a graph index layered over the notebook. It scans configured roots and
+recognizes a naming grammar where a folder named exactly `CODE-NN` ties data to an
+experiment: the 5-character `CODE` identifies the experiment series and `NN` is
+the repetition, with an `X` before the number marking an excluded session — e.g.
+`SORVI-01`, `COV2D-X03`. A bare `CODE` folder (no `-NN`) holds aggregate analyses
+spanning the whole series. Downstream structure lives in the nesting *beneath* a
+recognized folder, not in its name — e.g. `SORVI-01/raw`, `SORVI-01/analysis`.
+For every recognized folder it records every filesystem sighting (size, mtime,
+existence) of every artifact.
 
 - The **notebook** (`experiments.db`) is authoritative for experiment metadata.
 - The **filesystem** is authoritative for raw/derived data.
