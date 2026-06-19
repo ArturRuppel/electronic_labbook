@@ -12,12 +12,47 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from eln.plugins import discover_plugins
+
 DEFAULT_DB_NAME = "experiments.db"
 # Bundled static template lives in the code repo's catalog/ directory.
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "catalog"
 
+# Card/stat markup matches the template's hand-written tiles byte-for-byte so the
+# plugin-injected presentations card is indistinguishable from the core cards.
+_CARD = (
+    '            <a href="{href}" class="card">\n'
+    '                <div class="card-icon">{icon}</div>\n'
+    '                <div class="card-title">{label}</div>\n'
+    '                <div class="card-description">{desc}</div>\n'
+    '            </a>'
+)
+_STAT = (
+    '            <div class="stat-item"><div class="stat-number">{count}</div>'
+    '<div class="stat-label">{label}</div></div>'
+)
 
-def generate_home(root, catalog_out=None, template_path=None):
+
+def _plugin_cards(plugins):
+    """Render one home-page card per plugin that declares a nav entry + home card."""
+    cards = [
+        _CARD.format(href=p.nav.href, icon=p.home_card.icon,
+                     label=p.nav.label, desc=p.home_card.description)
+        for p in plugins if p.nav and p.home_card
+    ]
+    return "\n".join(cards)
+
+
+def _plugin_stats(plugins, root):
+    """Render one stat tile per plugin that declares a nav entry + counter."""
+    stats = [
+        _STAT.format(count=p.home_count(root), label=p.nav.label)
+        for p in plugins if p.nav and p.home_count
+    ]
+    return "\n".join(stats)
+
+
+def generate_home(root, catalog_out=None, template_path=None, plugins=None):
     """Generate ``index.html`` for the data-repo at *root*.
 
     *template_path* defaults to the bundled ``catalog/home_template.html``; output
@@ -44,21 +79,19 @@ def generate_home(root, catalog_out=None, template_path=None):
     reports_dir = root / "reports"
     total_reports = len(list(reports_dir.glob("**/*.md"))) if reports_dir.exists() else 0
 
-    # Count presentations
-    presentations_dir = root / "presentations"
-    total_presentations = 0
-    if presentations_dir.exists():
-        total_presentations = sum(1 for d in presentations_dir.iterdir()
-                                  if d.is_dir() and (d / "index.html").exists())
-
     # Read template
     html = template_file.read_text()
+
+    # Plugin-contributed cards + stat tiles (e.g. presentations).
+    if plugins is None:
+        plugins = discover_plugins()
+    html = html.replace('__PLUGIN_CARDS__', _plugin_cards(plugins))
+    html = html.replace('__PLUGIN_STATS__', _plugin_stats(plugins, root))
 
     # Replace placeholders
     html = html.replace('__TOTAL_EXPERIMENTS__', str(total_experiments))
     html = html.replace('__TOTAL_PROTOCOLS__', str(total_protocols))
     html = html.replace('__TOTAL_REPORTS__', str(total_reports))
-    html = html.replace('__TOTAL_PRESENTATIONS__', str(total_presentations))
     html = html.replace('__UPDATE_DATE__', datetime.now().strftime("%Y-%m-%d"))
 
     # Write to file

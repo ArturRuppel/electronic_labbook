@@ -156,6 +156,10 @@ def test_protocols_and_presentations_and_home(data_root):
     home = (catalog / "index.html").read_text()
     assert "__TOTAL_EXPERIMENTS__" not in home  # placeholder substituted
     assert ">3<" in home or "3" in home        # 3 experiments counted
+    # The presentations card + count come from the plugin, not hardcoded markup.
+    assert "__PLUGIN_CARDS__" not in home and "__PLUGIN_STATS__" not in home
+    assert 'href="presentations.html" class="card"' in home
+    assert "Slide decks and seminar talks" in home  # plugin home_card description
 
 
 def test_regeneration_is_byte_identical(data_root):

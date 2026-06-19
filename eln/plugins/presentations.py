@@ -9,7 +9,7 @@ existing :mod:`eln.generators.presentations` so the registry has a real plugin.
 from pathlib import Path
 
 from eln.generators.presentations import generate_presentations
-from eln.plugins import NavLink, Plugin, StaticMount
+from eln.plugins import HomeCard, NavLink, Plugin, StaticMount
 
 
 def count_presentations(root):
@@ -27,5 +27,6 @@ plugin = Plugin(
     nav=NavLink("Presentations", "presentations.html"),
     generate=generate_presentations,
     static_mount=StaticMount("presentations", lambda root: Path(root) / "presentations"),
+    home_card=HomeCard("🎬", "Slide decks and seminar talks"),
     home_count=count_presentations,
 )
