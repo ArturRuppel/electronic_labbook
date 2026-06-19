@@ -26,6 +26,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from eln.generators import generate_all
+from eln.plugins import discover_plugins
 from eln.sdgl import (
     SDGL,
     allocate_experiment_codes,
@@ -47,11 +48,12 @@ ASSETS_DIR = Path(__file__).resolve().parents[2] / "catalog"
 
 # Generated pages (written into the data root's catalog/) are served from there;
 # everything else is a static asset served from ASSETS_DIR.
-GENERATED_PAGES = {
+# Core generated pages. Plugin-contributed pages (e.g. presentations.html) are
+# added per-app from each plugin's nav href.
+CORE_GENERATED_PAGES = {
     "experiments.html",
     "protocols.html",
     "reports.html",
-    "presentations.html",
     "index.html",
 }
 
@@ -74,13 +76,17 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, sc
     sdgl_db_path = Path(sdgl_db_path) if sdgl_db_path else root / "sdgl.db"
     catalog_dir = root / "catalog"
     reports_path = root / "reports"
-    presentations_path = root / "presentations"
     thumbnails_path = root / "thumbnails"
     assets = Path(assets_dir) if assets_dir else ASSETS_DIR
 
     app = Flask(__name__)
     CORS(app)  # Enable CORS for local development
     app.config["SCAN_ROOTS"] = scan_roots or []
+
+    plugins = discover_plugins()
+    generated_pages = CORE_GENERATED_PAGES | {
+        p.nav.href for p in plugins if p.nav and p.nav.href.endswith(".html")
+    }
 
     # ---- helpers -----------------------------------------------------------
 
@@ -98,7 +104,7 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, sc
     def serve_html_with_overlay(filename):
         """Serve a generated page (from the data root) or a static frontend
         asset (from the code repo) with the edit overlay injected."""
-        if filename in GENERATED_PAGES:
+        if filename in generated_pages:
             filepath = catalog_dir / filename
         else:
             filepath = assets / filename
@@ -145,9 +151,24 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, sc
     def serve_thumbnail_asset(filepath):
         return send_from_directory(str(thumbnails_path), filepath, conditional=True)
 
-    @app.route("/presentations/<path:filepath>")
-    def serve_presentation_asset(filepath):
-        return send_from_directory(str(presentations_path), filepath)
+    # Plugin-contributed serving: static mounts (e.g. presentations slide assets)
+    # plus any custom routes a plugin registers. A factory binds each mount's
+    # source so the loop variable isn't captured late.
+    def _make_static_handler(source_dir):
+        def handler(filepath):
+            return send_from_directory(str(source_dir), filepath)
+        return handler
+
+    for _plugin in plugins:
+        mount = _plugin.static_mount
+        if mount:
+            app.add_url_rule(
+                f"/{mount.url_prefix}/<path:filepath>",
+                endpoint=f"plugin_static_{_plugin.name}",
+                view_func=_make_static_handler(mount.source(root)),
+            )
+        if _plugin.register_routes:
+            _plugin.register_routes(app, root)
 
     # ==================== SCIENTIFIC DATA GRAPH LAYER ====================
 

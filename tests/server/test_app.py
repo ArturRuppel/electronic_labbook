@@ -196,3 +196,29 @@ def test_backup_choose_folder_route(tmp_path):
         resp = client.post("/api/sdgl/backup/choose-folder")
     assert resp.status_code == 200
     assert resp.get_json()["path"] == "/picked/path"
+
+
+# --- plugin-driven serving --------------------------------------------------
+
+def test_presentations_static_mount_serves_file(tmp_path):
+    """The presentations plugin's StaticMount serves slide assets under its prefix."""
+    from eln.server import create_app
+    deck = tmp_path / "repo" / "presentations" / "2026-01-01_talk"
+    deck.mkdir(parents=True)
+    (deck / "index.html").write_text("<h1>Deck</h1>")
+    client = create_app(tmp_path / "repo").test_client()
+    resp = client.get("/presentations/2026-01-01_talk/index.html")
+    assert resp.status_code == 200
+    assert b"Deck" in resp.data
+
+
+def test_presentations_html_is_a_generated_page(tmp_path):
+    """presentations.html is served as a generated page via the plugin's nav href."""
+    from eln.server import create_app
+    catalog = tmp_path / "repo" / "catalog"
+    catalog.mkdir(parents=True)
+    (catalog / "presentations.html").write_text("<html><body>P</body></html>")
+    client = create_app(tmp_path / "repo").test_client()
+    resp = client.get("/presentations.html")
+    assert resp.status_code == 200
+    assert b"P" in resp.data
