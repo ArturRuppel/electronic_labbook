@@ -46,6 +46,13 @@
 
         /* Explorer tree */
         #tree { padding: 0.4rem 0.25rem; }
+        .sel-box { margin: 0 0.35rem 0 0; cursor: pointer; }
+        .backup-btn { margin-left: auto; }
+        .backup-btn:disabled { opacity: 0.5; cursor: default; }
+        .backup-panel { padding: 0.6rem; }
+        .backup-panel .row { margin: 0.3rem 0; }
+        .backup-panel .warn { color: #b25b00; }
+        .backup-panel progress { width: 100%; }
         .row {
             display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem;
             border-radius: 6px; cursor: pointer; user-select: none;
@@ -132,6 +139,7 @@
                     <button id="tab-curation" data-view="curation-view">Curation</button>
                 </div>
                 <input id="search" type="search" placeholder="Search title or tags">
+                <button id="backup-btn" class="backup-btn" disabled>Backup… (0)</button>
             </div>
             <div id="explorer-view" class="view active">
                 <div id="tree"></div>
@@ -160,10 +168,34 @@
         let treeData = {experiments: []};
         let selectedKey = null;
 
+        const selected = new Set();            // keys: `${node_id} ${rel_path}`
+        const selKey = (nodeId, rel) => `${nodeId} ${rel || ''}`;
+        function toggleKeys(keys, on) {
+            keys.forEach(k => { if (on) selected.add(k); else selected.delete(k); });
+            updateBackupButton();
+        }
+
+        function nodeKeysForExperiment(exp) {
+            // Whole-node selection for every repetition + the aggregate, if any.
+            const keys = (exp.repetitions || []).map(r => selKey(r.node_id, ''));
+            if (exp.aggregate) keys.push(selKey(exp.aggregate.node_id, ''));
+            return keys;
+        }
+
+        function collectSelections() {
+            // node_id contains no spaces; rel_path may, so split on the first only.
+            return [...selected].map(k => {
+                const sp = k.indexOf(' ');
+                return {node_id: k.slice(0, sp), rel_path: k.slice(sp + 1)};
+            });
+        }
+
         document.querySelectorAll('.tabs button').forEach(button => {
             button.addEventListener('click', () => showView(button.dataset.view));
         });
         document.getElementById('search').addEventListener('input', applyFilter);
+        document.getElementById('backup-btn').addEventListener('click', startBackupFlow);
+        updateBackupButton();
 
         loadAll();
 
@@ -201,9 +233,18 @@
             applyFilter();
         }
 
-        function makeRow({twisty, color, icon, label, meta, badge, badgeClass}) {
+        function makeRow({twisty, color, icon, label, meta, badge, badgeClass, check}) {
             const row = document.createElement('div');
             row.className = 'row';
+            if (check && check.keys && check.keys.length) {
+                const box = document.createElement('input');
+                box.type = 'checkbox';
+                box.className = 'sel-box';
+                box.checked = check.keys.every(k => selected.has(k));
+                box.addEventListener('click', (e) => e.stopPropagation());
+                box.addEventListener('change', () => toggleKeys(check.keys, box.checked));
+                row.appendChild(box);
+            }
             const tw = document.createElement('span');
             tw.className = 'twisty' + (twisty ? '' : ' spacer');
             tw.textContent = '▶';
@@ -256,7 +297,8 @@
             const label = `<span class="row-id">${escapeHtml(exp.code || '')}</span> ${escapeHtml(exp.title || '(untitled)')}${tags}`;
             const row = makeRow({
                 twisty: true, color: TYPE_COLORS.experiment, label,
-                badge: `${exp.repetition_count} rep${exp.repetition_count === 1 ? '' : 's'}`
+                badge: `${exp.repetition_count} rep${exp.repetition_count === 1 ? '' : 's'}`,
+                check: {keys: nodeKeysForExperiment(exp)},
             });
             row.dataset.search = `${exp.code} ${exp.title} ${(exp.tags || []).join(' ')}`.toLowerCase();
             row.addEventListener('click', () => select(`exp:${index}`, row, () => detailExperiment(exp)), true);
@@ -279,7 +321,8 @@
                 twisty: true, color: TYPE_COLORS.aggregate_analysis || TYPE_COLORS.experiment,
                 label: `<span class="row-id">Aggregate</span> <span class="muted">full experiment</span>`,
                 meta, badge: fileCount ? `${fileCount} item${fileCount === 1 ? '' : 's'}` : null,
-                badgeClass: 'muted'
+                badgeClass: 'muted',
+                check: {keys: [selKey(aggregate.node_id, '')]},
             });
             return collapsible(row, (container) => {
                 if (!aggregate.files.length && !(aggregate.links || []).length) {
@@ -289,7 +332,7 @@
                     none.textContent = 'No scanned data or linked entities yet.';
                     container.appendChild(none);
                 }
-                aggregate.files.forEach((entry, i) => container.appendChild(fileNode(entry, `${key}.f${i}`)));
+                aggregate.files.forEach((entry, i) => container.appendChild(fileNode(entry, `${key}.f${i}`, aggregate.node_id)));
                 (aggregate.links || []).forEach((link, i) => container.appendChild(linkRow(link, `${key}.l${i}`)));
             });
         }
@@ -302,7 +345,8 @@
                 twisty: true, color: TYPE_COLORS.experiment,
                 label: `<span class="row-id">${escapeHtml(rep.id)}</span>`,
                 meta, badge: fileCount ? `${fileCount} item${fileCount === 1 ? '' : 's'}` : null,
-                badgeClass: 'muted'
+                badgeClass: 'muted',
+                check: {keys: [selKey(rep.node_id, '')]},
             });
             row.addEventListener('click', () => select(`rep:${key}`, row, () => detailRepetition(exp, rep)), true);
             return collapsible(row, (container) => {
@@ -313,12 +357,12 @@
                     none.textContent = 'No scanned data or linked entities yet.';
                     container.appendChild(none);
                 }
-                rep.files.forEach((entry, i) => container.appendChild(fileNode(entry, `${key}.f${i}`)));
+                rep.files.forEach((entry, i) => container.appendChild(fileNode(entry, `${key}.f${i}`, rep.node_id)));
                 rep.links.forEach((link, i) => container.appendChild(linkRow(link, `${key}.l${i}`)));
             });
         }
 
-        function fileNode(entry, key) {
+        function fileNode(entry, key, nodeId) {
             const icon = entry.is_dir ? '📁' : '📄';
             let badge = null, badgeClass = '';
             if (entry.stale_count) { badge = `${entry.stale_count} stale`; badgeClass = 'warn'; }
@@ -326,12 +370,13 @@
             const meta = entry.is_dir ? '' : formatBytes(entry.size);
             const row = makeRow({
                 twisty: entry.is_dir, icon, label: escapeHtml(entry.name),
-                meta, badge, badgeClass
+                meta, badge, badgeClass,
+                check: {keys: [selKey(nodeId, entry.rel_path)]},
             });
             row.addEventListener('click', () => select(`file:${key}`, row, () => detailFile(entry)), true);
             if (!entry.is_dir) return wrapLeaf(row);
             const block = collapsible(row, (container) => {
-                (entry.children || []).forEach((child, i) => container.appendChild(fileNode(child, `${key}.${i}`)));
+                (entry.children || []).forEach((child, i) => container.appendChild(fileNode(child, `${key}.${i}`, nodeId)));
             });
             // raw/ subtrees stay collapsed by default (assumed immutable bulk data).
             return block;
@@ -514,6 +559,91 @@
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({location_id: locationId})
             });
+        }
+
+        // ---- Backup ---------------------------------------------------------
+
+        function updateBackupButton() {
+            const btn = document.getElementById('backup-btn');
+            btn.textContent = `Backup… (${selected.size})`;
+            btn.disabled = selected.size === 0;
+        }
+
+        let backupDest = null;
+
+        async function chooseDestination() {
+            const resp = await fetch(`${API}/backup/choose-folder`, {method: 'POST'})
+                .then(r => r.json()).catch(() => ({}));
+            if (resp && resp.path) return resp.path;
+            // Fallback: typed path (dialog cancelled or unavailable).
+            return prompt('Backup destination folder (absolute path):') || null;
+        }
+
+        async function startBackupFlow() {
+            const selections = collectSelections();
+            if (!selections.length) return;
+            const preview = await fetch(`${API}/backup/preview`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({selections}),
+            }).then(r => r.json());
+            renderPreview(preview, selections);
+        }
+
+        function renderPreview(preview, selections) {
+            const mb = (preview.total_size / (1024 * 1024)).toFixed(1);
+            let html = `<div class="backup-panel"><h2>Backup preview</h2>`;
+            html += `<div class="row"><strong>${preview.file_count}</strong> files · <strong>${mb} MB</strong></div>`;
+            if (preview.missing.length) {
+                html += `<div class="row warn">${preview.missing.length} recorded file(s) missing on disk — will be skipped.</div>`;
+            }
+            const resolutions = {};
+            if (preview.conflicts.length) {
+                html += `<div class="row warn">${preview.conflicts.length} conflict(s): pick a copy for each.</div>`;
+                preview.conflicts.forEach((c, i) => {
+                    html += `<div class="row"><div class="muted">${escapeHtml(c.rel_path)}</div>`;
+                    c.copies.forEach((copy, j) => {
+                        const id = `conf-${i}-${j}`;
+                        html += `<label><input type="radio" name="conf-${i}" value="${escapeHtml(copy.location_id)}" ${j === 0 ? 'checked' : ''}> ${escapeHtml(copy.root_name || 'local')} · ${formatBytes(copy.size)} · ${escapeHtml(copy.path)}</label><br>`;
+                    });
+                    html += `</div>`;
+                    resolutions[`${c.node_id}\n${c.rel_path}`] = c.copies[0].location_id;
+                });
+            }
+            html += `<div class="row"><button id="backup-go">Choose destination & copy</button></div></div>`;
+            setDetail(html);
+            document.getElementById('backup-go').addEventListener('click', async () => {
+                preview.conflicts.forEach((c, i) => {
+                    const picked = document.querySelector(`input[name="conf-${i}"]:checked`);
+                    if (picked) resolutions[`${c.node_id}\n${c.rel_path}`] = picked.value;
+                });
+                const dest = await chooseDestination();
+                if (!dest) return;
+                await fetch(`${API}/backup/start`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({selections, dest, resolutions}),
+                });
+                pollBackupStatus();
+            });
+        }
+
+        async function pollBackupStatus() {
+            const status = await fetch(`${API}/backup/status`).then(r => r.json());
+            if (status.status === 'running') {
+                const total = status.total_files || 0;
+                const done = status.done_files || 0;
+                setDetail(`<div class="backup-panel"><h2>Backing up…</h2>
+                    <div class="row">${done} / ${total} files</div>
+                    <progress max="${total}" value="${done}"></progress>
+                    <div class="muted">${escapeHtml(status.current || '')}</div></div>`);
+                setTimeout(pollBackupStatus, 500);
+            } else if (status.status === 'done') {
+                const s = status.summary || {};
+                setDetail(`<div class="backup-panel"><h2>Backup complete</h2>
+                    <div class="row">Copied <strong>${s.copied}</strong> files to ${escapeHtml(s.dest || '')}</div>
+                    <div class="row muted">${(s.skipped || []).length} skipped · ${(s.errors || []).length} errors</div></div>`);
+            } else if (status.status === 'error') {
+                setDetail(`<div class="backup-panel warn"><h2>Backup failed</h2><div>${escapeHtml(status.error || '')}</div></div>`);
+            }
         }
 
         // ---- Curation + search ---------------------------------------------
