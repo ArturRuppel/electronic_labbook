@@ -27,7 +27,7 @@ def _touch(path, ts):
 
 
 @pytest.fixture
-def data_root(tmp_path):
+def data_root(tmp_path, monkeypatch):
     """A data-repo root: experiments.db (with protocols/tags/channels), an SDGL
     scan over a CODE-NN tree, a report using the Plan F overview, and a slide deck."""
     root = tmp_path
@@ -54,10 +54,6 @@ def data_root(tmp_path):
     conn.commit()
     conn.close()
 
-    (root / "sdgl.toml").write_text(
-        '[scanner]\nrun_on_startup = false\n\n[[scan_roots]]\nname = "data"\npath = "data"\n'
-    )
-
     data = root / "data"
     ts1 = datetime(2025, 3, 10, 12, 0).timestamp()
     ts2 = datetime(2025, 4, 15, 9, 0).timestamp()
@@ -83,6 +79,14 @@ def data_root(tmp_path):
         1: datetime.fromtimestamp(ts1).strftime("%Y-%m-%d"),
         2: datetime.fromtimestamp(ts2).strftime("%Y-%m-%d"),
     }
+
+    # Unified config (discoverable via LABBOOK_CONFIG) so scan_from_config works.
+    cfg = root / "labbook.toml"
+    cfg.write_text(
+        f'data_root = "{root}"\n\n[scanner]\nrun_on_startup = false\n\n'
+        '[[scan_roots]]\nname = "data"\npath = "data"\n'
+    )
+    monkeypatch.setenv("LABBOOK_CONFIG", str(cfg))
 
     # Run a real SDGL scan so sdgl.db exists and dates are derivable.
     SDGL(root).scan_from_config()

@@ -30,7 +30,6 @@ from eln.sdgl import (
     SDGL,
     allocate_experiment_codes,
     format_experiment_id,
-    parse_sdgl_toml,
 )
 from eln.server import publish as publish_mod
 from eln.server.experiment_ids import (
@@ -63,8 +62,12 @@ OVERLAY_SNIPPET = '''
 _AUTH_SCRIPT_RE = re.compile(r'<script\s+src=["\']auth\.js["\']\s*>\s*</script>')
 
 
-def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None):
-    """Build the Flask app bound to data-repo ``root``."""
+def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, scan_roots=None):
+    """Build the Flask app bound to data-repo ``root``.
+
+    ``scan_roots`` is the injected list of scan-root configs (from the unified
+    ``labbook.toml``); the scan route uses it instead of reading a per-repo file.
+    """
     root = Path(root)
     database_path = Path(eln_db_path) if eln_db_path else root / "experiments.db"
     sdgl_db_path = Path(sdgl_db_path) if sdgl_db_path else root / "sdgl.db"
@@ -76,6 +79,7 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None):
 
     app = Flask(__name__)
     CORS(app)  # Enable CORS for local development
+    app.config["SCAN_ROOTS"] = scan_roots or []
 
     # ---- helpers -----------------------------------------------------------
 
@@ -233,10 +237,10 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None):
         data = request.json or {}
         roots = data.get("roots")
         if roots is None:
-            roots = parse_sdgl_toml(root / "sdgl.toml").get("scan_roots", [])
+            roots = app.config["SCAN_ROOTS"]
         result = get_sdgl().scan_roots(roots)
         if not roots:
-            result["message"] = "No scan roots configured in sdgl.toml"
+            result["message"] = "No scan roots configured"
         return jsonify(result)
 
     @app.route("/api/sdgl/scan/unmatched", methods=["GET"])
@@ -668,16 +672,18 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None):
     # ---- module-level helpers bound per-request ----------------------------
 
     def start_background_scan():
-        """Start one configured SDGL scan without blocking startup."""
-        config = parse_sdgl_toml(root / "sdgl.toml")
-        if not config.get("scanner", {}).get("run_on_startup", False):
+        """Start one SDGL scan over the injected scan roots without blocking
+        startup. The caller decides whether to invoke this (``labbook admin
+        --scan``); a no-op when no scan roots are configured."""
+        roots = app.config["SCAN_ROOTS"]
+        if not roots:
             return
         if database_path.exists():
             allocate_experiment_codes(database_path)
 
         def run_scan():
             try:
-                get_sdgl().scan_roots(config.get("scan_roots", []))
+                get_sdgl().scan_roots(roots)
             except Exception as e:  # noqa: BLE001
                 print(f"SDGL startup scan failed: {e}")
 

@@ -828,9 +828,11 @@ class SDGL:
             if owns_conn:
                 conn.close()
 
-    def scan_from_config(self):
-        config = parse_sdgl_toml(self.root_path / "sdgl.toml")
-        return self.scan_roots(config["scan_roots"])
+    def scan_from_config(self, config_path=None):
+        from eln.config import load_config
+
+        config = load_config(config_path, root_override=str(self.root_path))
+        return self.scan_roots(config.scan_roots)
 
     def scan_roots(self, roots, list_paths=False, progress=None):
         """Discover CODE-NN folders across the given roots and index their
@@ -1534,13 +1536,15 @@ def update_labbook(root_path=None, verbose=True, list_paths=False):
     Returns:
         dict: Scan summary with counts of recognized, unmatched, aggregates, etc.
     """
+    from eln.config import load_config
+
     root = Path(root_path) if root_path else Path.cwd()
     service = SDGL(root)
-    config = parse_sdgl_toml(root / "sdgl.toml")
-    roots = config.get("scan_roots", [])
+    config = load_config(root_override=str(root))
+    roots = config.scan_roots
 
     if not roots:
-        print("No scan roots configured in sdgl.toml", file=sys.stderr)
+        print("No scan roots configured in labbook.toml", file=sys.stderr)
         return {"error": "No scan roots configured"}
 
     if verbose:

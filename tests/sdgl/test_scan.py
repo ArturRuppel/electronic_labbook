@@ -47,8 +47,9 @@ def _touch(path, ts):
 
 
 @pytest.fixture
-def data_root(tmp_path):
-    """A data root with experiments.db, sdgl.toml, and a small CODE-NN tree."""
+def data_root(tmp_path, monkeypatch):
+    """A data root with experiments.db, a small CODE-NN tree, and a unified
+    labbook.toml discoverable via LABBOOK_CONFIG (so scan_from_config works)."""
     root = tmp_path
     db = root / "experiments.db"
     init_db.init_db(db)
@@ -59,9 +60,12 @@ def data_root(tmp_path):
     conn.commit()
     conn.close()
 
-    (root / "sdgl.toml").write_text(
-        '[scanner]\nrun_on_startup = false\n\n[[scan_roots]]\nname = "data"\npath = "data"\n'
+    cfg = root / "labbook.toml"
+    cfg.write_text(
+        f'data_root = "{root}"\n\n[scanner]\nrun_on_startup = false\n\n'
+        '[[scan_roots]]\nname = "data"\npath = "data"\n'
     )
+    monkeypatch.setenv("LABBOOK_CONFIG", str(cfg))
 
     data = root / "data"
     # Rep 1: raw file (the experiment start) plus a LATER analysis output and an

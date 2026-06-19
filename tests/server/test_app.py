@@ -10,7 +10,7 @@ from eln.server import create_app
 
 @pytest.fixture
 def app_root(tmp_path):
-    """A data root with experiments.db (one experiment, one protocol) + sdgl.toml."""
+    """A data root with experiments.db (one experiment, one protocol)."""
     root = tmp_path
     db = root / "experiments.db"
     init_db.init_db(db)
@@ -26,11 +26,8 @@ def app_root(tmp_path):
     )
     conn.commit()
     conn.close()
-    (root / "sdgl.toml").write_text(
-        '[scanner]\nrun_on_startup = false\n\n[[scan_roots]]\nname = "data"\npath = "data"\n'
-    )
     (root / "reports").mkdir()
-    app = create_app(root)
+    app = create_app(root, scan_roots=[{"name": "data", "path": root / "data"}])
     app.config.update(TESTING=True)
     return root, app
 
