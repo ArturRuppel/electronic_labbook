@@ -26,7 +26,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from eln.generators import generate_all
-from eln.plugins import discover_plugins
+from eln.plugins import discover_plugins, effective_scan_roots
 from eln.sdgl import (
     SDGL,
     allocate_experiment_codes,
@@ -81,9 +81,10 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, sc
 
     app = Flask(__name__)
     CORS(app)  # Enable CORS for local development
-    app.config["SCAN_ROOTS"] = scan_roots or []
 
     plugins = discover_plugins()
+    # Configured scan roots plus any a plugin contributes (scan-root extension point).
+    app.config["SCAN_ROOTS"] = effective_scan_roots(scan_roots, root, plugins)
     generated_pages = CORE_GENERATED_PAGES | {
         p.nav.href for p in plugins if p.nav and p.nav.href.endswith(".html")
     }

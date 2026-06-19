@@ -100,4 +100,25 @@ def discover_plugins() -> list:
     return out
 
 
-__all__ = ["NavLink", "StaticMount", "HomeCard", "Plugin", "discover_plugins"]
+def effective_scan_roots(config_roots, root, plugins=None) -> list:
+    """The configured scan roots plus any a plugin contributes for *root*.
+
+    Lets a plugin add directories to the SDGL scan (the **scan-root contribution**
+    extension point) without the core knowing about them."""
+    if plugins is None:
+        plugins = discover_plugins()
+    roots = list(config_roots or [])
+    for plugin in plugins:
+        if plugin.scan_roots:
+            roots.extend(plugin.scan_roots(Path(root)))
+    return roots
+
+
+__all__ = [
+    "NavLink",
+    "StaticMount",
+    "HomeCard",
+    "Plugin",
+    "discover_plugins",
+    "effective_scan_roots",
+]

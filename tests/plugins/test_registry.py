@@ -1,6 +1,6 @@
 """Plugin registry: built-in plugins + third-party entry-point discovery."""
 
-from eln.plugins import Plugin, NavLink, discover_plugins
+from eln.plugins import Plugin, NavLink, discover_plugins, effective_scan_roots
 
 
 def test_builtin_includes_presentations():
@@ -27,6 +27,23 @@ def test_entry_point_plugins_are_merged(monkeypatch):
     monkeypatch.setattr("eln.plugins._entry_point_plugins", lambda: [extra])
     names = {p.name for p in discover_plugins()}
     assert {"presentations", "widgets"} <= names
+
+
+def test_effective_scan_roots_appends_plugin_roots():
+    base = [{"name": "data", "path": "/data"}]
+    contributor = Plugin(
+        name="decks",
+        scan_roots=lambda root: [{"name": "decks", "path": f"{root}/decks"}],
+    )
+    roots = effective_scan_roots(base, "/repo", plugins=[contributor])
+    assert {"name": "data", "path": "/data"} in roots
+    assert {"name": "decks", "path": "/repo/decks"} in roots
+
+
+def test_effective_scan_roots_unchanged_without_contributors():
+    base = [{"name": "data", "path": "/data"}]
+    quiet = Plugin(name="quiet")  # no scan_roots
+    assert effective_scan_roots(base, "/repo", plugins=[quiet]) == base
 
 
 def test_builtin_wins_over_duplicate_entry_point(monkeypatch):

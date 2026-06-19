@@ -54,10 +54,12 @@ def cmd_admin(args):
 
 
 def cmd_scan(args):
+    from eln.plugins import effective_scan_roots
     from eln.sdgl import SDGL
 
     config = _load(args)
     sdgl = SDGL(config.data_root)
+    roots = effective_scan_roots(config.scan_roots, config.data_root)
 
     def report(event):
         if event.get("phase") == "root":
@@ -66,7 +68,7 @@ def cmd_scan(args):
             s = event.get("summary", {})
             print(f"  done: {s}")
 
-    sdgl.scan_roots(config.scan_roots, progress=report)
+    sdgl.scan_roots(roots, progress=report)
     return 0
 
 
