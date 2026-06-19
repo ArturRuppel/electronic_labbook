@@ -123,3 +123,76 @@ def test_generated_page_served_after_regenerate(client):
     html = resp.get_data(as_text=True)
     assert "TFMSP-01" in html
     assert "edit-overlay.js" in html  # overlay injected into generated pages too
+
+
+def _seed_backup_root(tmp_path):
+    """Create a data-repo root with one experiment node + one real file location.
+    Returns (root, node_id, src_file)."""
+    from eln.sdgl import SDGL
+    root = tmp_path / "repo"
+    root.mkdir()
+    sdgl = SDGL(root)
+    node_id = "experiment:TFMSP-01"
+    sdgl.upsert_node(node_id, "experiment", "TFM", None, None, {"code": "TFMSP"})
+    src = tmp_path / "src" / "raw" / "a.tif"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"hello")
+    st = src.stat()
+    sdgl.upsert_location(node_id, "gaia", str(src), role="file", qualifier="raw",
+                         rel_path="raw/a.tif", size=st.st_size, mtime=st.st_mtime,
+                         is_dir=0, metadata={"name": "a.tif"})
+    return root, node_id, src
+
+
+def test_backup_preview_route(tmp_path):
+    from eln.server import create_app
+    root, node_id, _src = _seed_backup_root(tmp_path)
+    client = create_app(root).test_client()
+    resp = client.post("/api/sdgl/backup/preview",
+                       json={"selections": [{"node_id": node_id, "rel_path": ""}]})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["file_count"] == 1
+    assert body["total_size"] == 5
+
+
+def test_backup_preview_requires_selections(tmp_path):
+    from eln.server import create_app
+    root, _node, _src = _seed_backup_root(tmp_path)
+    client = create_app(root).test_client()
+    resp = client.post("/api/sdgl/backup/preview", json={"selections": []})
+    assert resp.status_code == 400
+
+
+def test_backup_start_and_status(tmp_path):
+    from eln.server import create_app
+    root, node_id, _src = _seed_backup_root(tmp_path)
+    dest = tmp_path / "dest"
+    app = create_app(root)
+    client = app.test_client()
+    resp = client.post("/api/sdgl/backup/start",
+                       json={"selections": [{"node_id": node_id, "rel_path": ""}],
+                             "dest": str(dest)})
+    assert resp.status_code == 200
+    # Worker is a daemon thread; join it via the app's job state.
+    import time
+    for _ in range(100):
+        status = client.get("/api/sdgl/backup/status").get_json()
+        if status["status"] in ("done", "error"):
+            break
+        time.sleep(0.02)
+    assert status["status"] == "done"
+    assert status["summary"]["copied"] == 1
+    assert (dest / "TFMSP" / "TFMSP-01" / "raw" / "a.tif").read_bytes() == b"hello"
+
+
+def test_backup_choose_folder_route(tmp_path):
+    from unittest import mock
+    from eln.server import create_app
+    root, _node, _src = _seed_backup_root(tmp_path)
+    client = create_app(root).test_client()
+    fake = mock.Mock(stdout="/picked/path\n", returncode=0)
+    with mock.patch("eln.server.app.subprocess.run", return_value=fake):
+        resp = client.post("/api/sdgl/backup/choose-folder")
+    assert resp.status_code == 200
+    assert resp.get_json()["path"] == "/picked/path"

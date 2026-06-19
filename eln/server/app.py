@@ -31,6 +31,7 @@ from eln.sdgl import (
     allocate_experiment_codes,
     format_experiment_id,
 )
+from eln.sdgl.backup import BackupJob, plan_backup, run_backup
 from eln.server import publish as publish_mod
 from eln.server.experiment_ids import (
     ExperimentIdError,
@@ -91,6 +92,8 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, sc
 
     def get_sdgl():
         return SDGL(root, eln_db_path=database_path, sdgl_db_path=sdgl_db_path)
+
+    backup_job = BackupJob()
 
     def serve_html_with_overlay(filename):
         """Serve a generated page (from the data root) or a static frontend
@@ -246,6 +249,83 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None, sc
     @app.route("/api/sdgl/scan/unmatched", methods=["GET"])
     def sdgl_scan_unmatched():
         return jsonify(get_sdgl().list_findings("unmatched"))
+
+    @app.route("/api/sdgl/backup/choose-folder", methods=["POST"])
+    def sdgl_backup_choose_folder():
+        """Open a native folder dialog in a subprocess and return the chosen path.
+        Returns {"path": null} when cancelled / unavailable so the UI can fall back
+        to a typed path."""
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "eln.sdgl.folder_dialog"],
+                capture_output=True, text=True, timeout=300,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return jsonify({"error": str(exc)}), 500
+        path = (proc.stdout or "").strip()
+        return jsonify({"path": path or None})
+
+    @app.route("/api/sdgl/backup/preview", methods=["POST"])
+    def sdgl_backup_preview():
+        data = request.json or {}
+        selections = data.get("selections") or []
+        if not selections:
+            return jsonify({"error": "no selections"}), 400
+        conn = get_sdgl().connect()
+        try:
+            return jsonify(plan_backup(conn, selections))
+        finally:
+            conn.close()
+
+    @app.route("/api/sdgl/backup/start", methods=["POST"])
+    def sdgl_backup_start():
+        data = request.json or {}
+        selections = data.get("selections") or []
+        dest = data.get("dest")
+        resolutions = data.get("resolutions") or {}
+        if not selections:
+            return jsonify({"error": "no selections"}), 400
+        if not dest:
+            return jsonify({"error": "no destination"}), 400
+        if backup_job.snapshot().get("status") == "running":
+            return jsonify({"error": "a backup is already running"}), 409
+        try:
+            Path(dest).mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return jsonify({"error": f"cannot use destination: {exc}"}), 400
+
+        backup_job.update(status="running", done_files=0, total_files=0,
+                          done_bytes=0, total_bytes=0, current=None,
+                          summary=None, error=None)
+
+        def report(event):
+            if event["phase"] == "start":
+                backup_job.update(total_files=event["total_files"],
+                                  total_bytes=event["total_bytes"])
+            elif event["phase"] == "file":
+                backup_job.update(done_files=event["done_files"],
+                                  total_files=event["total_files"],
+                                  done_bytes=event["done_bytes"],
+                                  total_bytes=event["total_bytes"],
+                                  current=event["current"])
+            elif event["phase"] == "done":
+                backup_job.update(status="done", summary=event["summary"])
+
+        def run():
+            conn = get_sdgl().connect()
+            try:
+                run_backup(conn, selections, dest, resolutions=resolutions, progress=report)
+            except Exception as exc:  # noqa: BLE001
+                backup_job.update(status="error", error=str(exc))
+            finally:
+                conn.close()
+
+        threading.Thread(target=run, name="sdgl-backup", daemon=True).start()
+        return jsonify({"status": "running"})
+
+    @app.route("/api/sdgl/backup/status", methods=["GET"])
+    def sdgl_backup_status():
+        return jsonify(backup_job.snapshot())
 
     # ==================== EXPERIMENTS ====================
 
