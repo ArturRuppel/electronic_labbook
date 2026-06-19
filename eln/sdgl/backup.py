@@ -84,3 +84,37 @@ def classify(copies):
         chosen = max(existing, key=lambda c: c["mtime"] or 0)
         return {"status": "ok", "chosen": chosen}
     return {"status": "conflict", "copies": existing}
+
+
+def plan_backup(conn, selections):
+    """Resolve selections into a copy preview: file count, total bytes, and the
+    missing / conflicting files the user must know about before copying."""
+    logical = resolve_logical_files(conn, selections)
+    ok, missing, conflicts = [], [], []
+    total_size = 0
+    for (node_id, rel), copies in logical.items():
+        result = classify(copies)
+        if result["status"] == "ok":
+            chosen = result["chosen"]
+            total_size += chosen["size"] or 0
+            ok.append({"node_id": node_id, "rel_path": rel,
+                       "location_id": chosen["id"], "size": chosen["size"]})
+        elif result["status"] == "missing":
+            missing.append({"node_id": node_id, "rel_path": rel})
+        else:
+            conflicts.append({
+                "node_id": node_id,
+                "rel_path": rel,
+                "copies": [
+                    {"location_id": c["id"], "path": c["path"],
+                     "root_name": c["root_name"], "size": c["size"], "mtime": c["mtime"]}
+                    for c in result["copies"]
+                ],
+            })
+    return {
+        "file_count": len(ok),
+        "total_size": total_size,
+        "ok": ok,
+        "missing": missing,
+        "conflicts": conflicts,
+    }

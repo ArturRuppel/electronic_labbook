@@ -3,7 +3,9 @@ import time
 from pathlib import Path
 
 from eln.sdgl import SDGL
-from eln.sdgl.backup import hash_file, dest_subpath, resolve_logical_files, classify
+from eln.sdgl.backup import (
+    hash_file, dest_subpath, resolve_logical_files, classify, plan_backup,
+)
 
 
 def test_hash_file_matches_hashlib(tmp_path):
@@ -148,3 +150,28 @@ def test_classify_conflicting_duplicates(tmp_path):
         conn.close()
     assert result["status"] == "conflict"
     assert len(result["copies"]) == 2
+
+
+def test_plan_backup_counts_and_size(tmp_path):
+    sdgl, node_id = _sdgl_with_files(tmp_path, [("raw/a.tif", b"aaa"), ("analysis/b.csv", b"bbbb")])
+    conn = sdgl.connect()
+    try:
+        plan = plan_backup(conn, [{"node_id": node_id, "rel_path": ""}])
+    finally:
+        conn.close()
+    assert plan["file_count"] == 2
+    assert plan["total_size"] == 3 + 4
+    assert plan["missing"] == []
+    assert plan["conflicts"] == []
+
+
+def test_plan_backup_reports_missing(tmp_path):
+    sdgl, node_id = _sdgl_with_files(tmp_path, [("raw/a.tif", b"aaa")])
+    conn = sdgl.connect()
+    try:
+        Path(conn.execute("SELECT path FROM file_locations LIMIT 1").fetchone()["path"]).unlink()
+        plan = plan_backup(conn, [{"node_id": node_id, "rel_path": ""}])
+    finally:
+        conn.close()
+    assert plan["file_count"] == 0
+    assert plan["missing"] == [{"node_id": node_id, "rel_path": "raw/a.tif"}]
