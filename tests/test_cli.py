@@ -49,8 +49,15 @@ def test_ensure_db_does_not_clobber_live_db(tmp_path):
     assert "live" in names  # untouched
 
 
-def test_backup_is_a_stub(capsys):
-    rc = main(["backup"])
-    err = capsys.readouterr().err
-    assert rc != 0
-    assert "step 8" in err.lower()
+def test_backup_subcommand_parses(monkeypatch):
+    import eln.cli as cli
+    called = {}
+
+    def fake_cmd_backup(args):
+        called["port"] = args.port
+        return 0
+
+    monkeypatch.setattr(cli, "cmd_backup", fake_cmd_backup)
+    rc = cli.main(["backup", "--port", "5099", "--no-browser"])
+    assert rc == 0
+    assert called["port"] == 5099

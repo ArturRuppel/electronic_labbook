@@ -108,8 +108,22 @@ def cmd_publish(args):
 
 
 def cmd_backup(args):
-    print("labbook backup: not yet implemented (Roadmap step 8).", file=sys.stderr)
-    return 1
+    """Launch the local server and open the explorer, where data can be selected
+    and backed up (Roadmap step 8). Reuses the admin server (local, unauthenticated)."""
+    from eln.server import create_app
+
+    config = _load(args)
+    _ensure_db(config)
+    app = create_app(config.data_root, scan_roots=config.scan_roots)
+    url = f"http://localhost:{args.port}/"
+    print("=" * 50)
+    print(f"Lab Notebook backup: {url}")
+    print("Select experiments/files, then click Backup.")
+    print("=" * 50)
+    if not args.no_browser:
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    app.run(debug=False, port=args.port)
+    return 0
 
 
 # ---- parser --------------------------------------------------------------
@@ -141,7 +155,9 @@ def build_parser():
     p = sub.add_parser("publish", help="DB -> experiments.sql -> commit + push")
     p.set_defaults(func=cmd_publish)
 
-    p = sub.add_parser("backup", help="back up identified data (Roadmap step 8)")
+    p = sub.add_parser("backup", help="launch the data backup flow (step 8)")
+    p.add_argument("--port", type=int, default=5000)
+    p.add_argument("--no-browser", action="store_true", help="do not open a browser")
     p.set_defaults(func=cmd_backup)
 
     return parser
