@@ -251,7 +251,7 @@ registration, generator hook, scan-root contribution, serving route) — defined
 correctly the first time rather than coupled-then-extracted. Becomes the
 template for future plugins and reinforces the open-source story.
 
-### 9b. One-time data migration (concentrated move)  ·  M  ·  _run once, after step 9_
+### 9b. One-time data migration (concentrated move)  ·  M  ·  _done_
 A single concentrated data move once the presentation plugin (step 9) is in place,
 so the whole corpus lands in one pass against final layout/extension points rather
 than being dribbled in. **Notebook text (`experiments.db`) is already migrated in

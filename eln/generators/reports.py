@@ -597,8 +597,13 @@ def generate_reports(root, catalog_out=None, plugins=None):
     if not reports_dir.exists():
         reports_dir.mkdir(parents=True)
 
-    # Get all markdown files in reports directory (recursively)
-    report_files = sorted(reports_dir.glob("**/*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Get all markdown files in reports directory (recursively). README.md is the
+    # folder's own documentation, not a report — skip it.
+    report_files = sorted(
+        (p for p in reports_dir.glob("**/*.md") if p.name.lower() != "readme.md"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
 
     if not report_files:
         reports_html = '<div class="no-reports">No reports available yet. Create markdown files in the reports/ directory.</div>'
