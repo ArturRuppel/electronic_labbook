@@ -832,7 +832,7 @@ class SDGL:
         config = parse_sdgl_toml(self.root_path / "sdgl.toml")
         return self.scan_roots(config["scan_roots"])
 
-    def scan_roots(self, roots, list_paths=False):
+    def scan_roots(self, roots, list_paths=False, progress=None):
         """Discover CODE-NN folders across the given roots and index their
         subtree metadata (names, sizes, mtimes — never contents).
 
@@ -857,6 +857,8 @@ class SDGL:
                 root_path = Path(root.get("path", ""))
                 if not root_path.is_absolute():
                     root_path = self.root_path / root_path
+                if progress:
+                    progress({"phase": "root", "root": root_name, "path": str(root_path)})
                 if not _root_is_observable(root_path):
                     continue
                 present_root_names.append(root_name)
@@ -979,6 +981,8 @@ class SDGL:
                     eln.close()
         finally:
             conn.close()
+        if progress:
+            progress({"phase": "done", "summary": summary})
         return summary
 
     def _materialize_experiment_dates(self, eln, conn):

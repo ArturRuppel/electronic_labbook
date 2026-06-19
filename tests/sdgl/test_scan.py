@@ -150,3 +150,12 @@ def test_start_date_rides_inside_experiments_sql(data_root, tmp_path):
     text = sql.read_text()
     assert "start_date" in text
     assert expected[1] in text
+
+
+def test_scan_roots_reports_progress(data_root):
+    """scan_roots emits a per-root event and a final 'done' summary event."""
+    root, _db, _expected = data_root
+    events = []
+    SDGL(root).scan_roots([{"name": "data", "path": "data"}], progress=events.append)
+    assert any(e.get("phase") == "root" and e.get("root") == "data" for e in events)
+    assert any(e.get("phase") == "done" for e in events)
