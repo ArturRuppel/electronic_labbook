@@ -286,3 +286,31 @@ server's `CORE_GENERATED_PAGES`, and `share._CATALOG_PAGES`. Sample notebook +
 full unit tests added. The design spec and implementation plan
 (`docs/superpowers/{specs,plans}/2026-06-20-notebooks*.md`) were executed and
 removed from the working tree (kept in git history, per the plan's final step).
+
+## 6. No interface to commit (stamp) artifacts
+
+**Confirmed gap:** there is currently **no interface to commit/record an
+artifact's provenance**. Stamping is library-only:
+
+- `stamp(...)` lives in `eln/analysis/provenance.py:67` and is exported from
+  `eln.analysis` — it is meant to be called *programmatically from notebook code*
+  (`from eln.analysis import stamp`). The sample notebook
+  (`sample_data/notebooks/SORVI-01.ipynb`) shows this as the intended usage.
+- There is **no CLI subcommand**: `eln/cli.py` exposes `admin`, `scan`, `verify`,
+  `timestamp`, `regenerate`, `rebuild`, `publish`, `backup`, `export` — no
+  `labbook stamp`.
+- There is **no server route / admin-UI control**: only the *verify* side is
+  exposed (`verify_provenance()` via `/api/sdgl/provenance/verify`, plus
+  `/api/timestamp/verify`). Recording a stamp has no endpoint and no button.
+
+So an artifact only becomes a `dataset` node with a `generates` edge if a human
+runs `stamp()` inside Python; nothing in the CLI, server, or notebooks page lets a
+user *commit* an artifact through an interface.
+
+**What to build (needs design):** an interface to stamp/commit artifacts. Options
+to weigh — a `labbook stamp <path> [--kind derived|curated] [...]` CLI subcommand
+(fits the existing CLI, scriptable); and/or a server route + a control on the
+notebooks/SDGL page to stamp a produced file. The notebooks provenance panel
+(item 5) already *reads* `generates` edges, so a "commit/stamp this artifact"
+affordance there is a natural home. Decide CLI vs. UI (or both) and the curated
+vs. derived entry path before implementing.
