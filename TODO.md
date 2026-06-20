@@ -216,13 +216,15 @@ same way reports and presentations already do.
 
 </details>
 
-## 5. Build the notebooks feature
+## ✅ 5. Build the notebooks feature — DONE
 
-**Goal:** add notebooks as a first-class catalog element — `.ipynb` wrappers in
-`ROOT/notebooks/` named by experiment ID (`SORVI-01` session / `SORVI` series),
-rendered (text + code, no outputs) into `notebooks.html` alongside protocols, with
-a provenance panel listing the artifacts each notebook produced.
-
-**Plan:** [`docs/superpowers/plans/2026-06-20-notebooks.md`](docs/superpowers/plans/2026-06-20-notebooks.md)
-(design spec: `docs/superpowers/specs/2026-06-20-notebooks-design.md`). Both are
-committed; ready to execute.
+**Done.** New file-driven generator `eln/generators/notebooks.py` scans
+`ROOT/notebooks/*.ipynb`, classifies each stem to an experiment ID via the SDGL
+grammar (session/series/unmatched), renders markdown+code cells from the `.ipynb`
+JSON with the stdlib (no nbconvert; outputs ignored, with a warning if present),
+and lists produced artifacts from `sdgl.db` `generates` edges (with
+`verify_provenance` status). Wired into nav (after Protocols), `generate_all`, the
+server's `CORE_GENERATED_PAGES`, and `share._CATALOG_PAGES`. Sample notebook +
+full unit tests added. The design spec and implementation plan
+(`docs/superpowers/{specs,plans}/2026-06-20-notebooks*.md`) were executed and
+removed from the working tree (kept in git history, per the plan's final step).
