@@ -1362,6 +1362,7 @@ class SDGL:
                     "oldest_mtime": oldest_mtime,
                     "files": files,
                     "links": self._linked_entities(conn, node["id"]),
+                    "artifacts": self._stamped_artifacts(conn, node["id"]),
                     # Qualifiers (can vary per repetition):
                     "tags": metadata.get("tags") or [],
                     "channels": metadata.get("channels") or [],
@@ -1439,11 +1440,17 @@ class SDGL:
         return row["oldest"] if row else None
 
     def _linked_entities(self, conn, node_id):
-        """Explicitly-linked protocols/reports/presentations for the detail pane."""
+        """Explicitly-linked protocols/reports/presentations for the detail pane.
+
+        Stamped artifacts (``generates`` edges to ``dataset`` nodes) are excluded
+        here — they are surfaced separately by :meth:`_stamped_artifacts` so the
+        explorer can render them distinctly with their provenance recipe."""
         entities = []
         for edge in conn.execute(
             "SELECT * FROM edges WHERE source_id = ? OR target_id = ?", (node_id, node_id)
         ):
+            if edge["relation_type"] == "generates":
+                continue
             other = edge["target_id"] if edge["source_id"] == node_id else edge["source_id"]
             if other.startswith("experiment:"):
                 continue
@@ -1460,6 +1467,36 @@ class SDGL:
             })
         entities.sort(key=lambda item: (item["type"], item["title"] or item["node_id"]))
         return entities
+
+    def _stamped_artifacts(self, conn, node_id):
+        """Artifacts this experiment produced, from outgoing ``generates`` edges.
+
+        Each item carries the ``dataset`` node and the full recipe recorded on the
+        edge (kind, library/function/params/inputs or tool/method, stamped_at), so
+        the explorer renders committed artifacts distinctly from raw scanned files
+        and can show their provenance in the detail pane."""
+        artifacts = []
+        for edge in conn.execute(
+            "SELECT target_id, metadata FROM edges "
+            "WHERE source_id = ? AND relation_type = 'generates'", (node_id,)
+        ):
+            target = edge["target_id"]
+            node = conn.execute(
+                "SELECT title, metadata FROM nodes WHERE id = ?", (target,)
+            ).fetchone()
+            node_meta = json_loads(node["metadata"]) if node else {}
+            record = json_loads(edge["metadata"])
+            rel_path = node_meta.get("rel_path") or record.get("path")
+            artifacts.append({
+                "node_id": target,
+                "name": (node["title"] if node else None)
+                        or (rel_path or target).rsplit("/", 1)[-1],
+                "rel_path": rel_path,
+                "kind": node_meta.get("kind") or record.get("kind"),
+                "record": record,
+            })
+        artifacts.sort(key=lambda item: item["rel_path"] or item["node_id"])
+        return artifacts
 
     def _assemble_files(self, conn, node_id):
         """Dedup file_locations by relative path (newest mtime wins; size-differing

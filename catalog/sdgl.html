@@ -79,6 +79,14 @@
         }
         .badge.warn { background: #f6e7c8; color: #8a6320; }
         .badge.muted { background: #eceff2; color: #6a7884; }
+        .badge.derived { background: #ece3f6; color: #6b3fae; }
+        .badge.curated { background: #f6ead8; color: #9a6516; }
+        /* A committed (stamped) artifact: distinct from raw scanned files. */
+        .row.artifact > .row-label { font-weight: 600; }
+        .prov-status { font-weight: 700; }
+        .prov-status.ok { color: #27735f; }
+        .prov-status.modified { color: #8a6320; }
+        .prov-status.missing { color: #8a3b3b; }
         .children { margin-left: 1.1rem; border-left: 1px solid #e6ebef; padding-left: 0.25rem; }
         .hidden { display: none; }
         .tag-chip {
@@ -167,7 +175,7 @@
         const TYPE_COLORS = {
             experiment: '#2d6f9f', protocol: '#7f5f2f', report: '#5d7290',
             presentation: '#8a6db1', dir: '#6b7b35', file: '#9aa6b0',
-            aggregate_analysis: '#2f8f7f'
+            aggregate_analysis: '#2f8f7f', dataset: '#7a4fb0'
         };
 
         let treeData = {experiments: []};
@@ -368,8 +376,9 @@
                 check: {keys: [selKey(rep.node_id, '')]},
             });
             row.addEventListener('click', () => select(`rep:${key}`, row, () => detailRepetition(exp, rep)), true);
+            const artifacts = rep.artifacts || [];
             return collapsible(row, (container) => {
-                if (!rep.files.length && !rep.links.length) {
+                if (!rep.files.length && !rep.links.length && !artifacts.length) {
                     const none = document.createElement('div');
                     none.className = 'row-meta';
                     none.style.padding = '0.35rem 0.6rem';
@@ -377,8 +386,23 @@
                     container.appendChild(none);
                 }
                 rep.files.forEach((entry, i) => container.appendChild(fileNode(entry, `${key}.f${i}`, rep.node_id)));
+                // Committed (stamped) artifacts render distinctly, above plain links.
+                artifacts.forEach((art, i) => container.appendChild(artifactRow(art, `${key}.a${i}`)));
                 rep.links.forEach((link, i) => container.appendChild(linkRow(link, `${key}.l${i}`)));
             });
+        }
+
+        function artifactRow(artifact, key) {
+            const kind = artifact.kind || 'derived';
+            const row = makeRow({
+                twisty: false, color: TYPE_COLORS.dataset, icon: '🔏',
+                label: escapeHtml(artifact.name),
+                meta: 'committed artifact',
+                badge: kind, badgeClass: kind === 'curated' ? 'curated' : 'derived',
+            });
+            row.classList.add('artifact');
+            row.addEventListener('click', () => select(`art:${key}`, row, () => detailArtifact(artifact)), true);
+            return wrapLeaf(row);
         }
 
         function fileNode(entry, key, nodeId) {
@@ -552,6 +576,56 @@
                     <dt>Node</dt><dd>${escapeHtml(link.node_id)}</dd>
                 </dl></div>
                 <div class="detail-section">${linkHtml(link)}</div>
+            `);
+        }
+
+        function detailArtifact(artifact) {
+            // A committed (stamped) artifact: show its provenance recipe — the
+            // references SDGL recorded at stamp time (never the source itself).
+            const r = artifact.record || {};
+            const kind = artifact.kind || r.kind || 'derived';
+            let recipe = '';
+            if (kind === 'derived') {
+                const lib = r.library || {}, nb = r.notebook || {};
+                const params = r.params || {}, inputs = r.inputs || {};
+                const paramRows = Object.keys(params).length
+                    ? Object.entries(params).map(([k, v]) =>
+                        `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(JSON.stringify(v))}</dd>`).join('')
+                    : '<dt class="muted">none</dt><dd></dd>';
+                const inputRows = Object.keys(inputs).length
+                    ? Object.entries(inputs).map(([p, h]) =>
+                        `<div class="list-item"><div>${escapeHtml(p)}</div><div class="muted">${escapeHtml(h)}</div></div>`).join('')
+                    : '<p class="muted">none</p>';
+                recipe = `
+                    <div class="detail-section"><h3>Recipe (derived)</h3><dl class="kv">
+                        <dt>Function</dt><dd>${escapeHtml(lib.function || '—')}</dd>
+                        <dt>Library commit</dt><dd>${escapeHtml(lib.commit || '—')}${lib.dirty ? ' <span class="badge warn">dirty</span>' : ''}</dd>
+                        <dt>Notebook</dt><dd>${escapeHtml(nb.path || '—')}</dd>
+                        <dt>Data commit</dt><dd>${escapeHtml(nb.commit || '—')}${nb.dirty ? ' <span class="badge warn">dirty</span>' : ''}</dd>
+                    </dl></div>
+                    <div class="detail-section"><h3>Parameters</h3><dl class="kv">${paramRows}</dl></div>
+                    <div class="detail-section"><h3>Inputs (${Object.keys(inputs).length})</h3><div class="list">${inputRows}</div></div>
+                `;
+            } else {
+                const nb = r.notebook || {};
+                recipe = `
+                    <div class="detail-section"><h3>Recipe (curated)</h3><dl class="kv">
+                        <dt>Tool</dt><dd>${escapeHtml(r.tool || '—')}</dd>
+                        <dt>Method</dt><dd>${escapeHtml(r.method || '—')}</dd>
+                        <dt>Data commit</dt><dd>${escapeHtml(nb.commit || '—')}${nb.dirty ? ' <span class="badge warn">dirty</span>' : ''}</dd>
+                    </dl></div>
+                `;
+            }
+            setDetail(`
+                <h2>${escapeHtml(artifact.name)}</h2>
+                <p><span class="type-pill">committed artifact</span>
+                   <span class="badge ${kind === 'curated' ? 'curated' : 'derived'}">${escapeHtml(kind)}</span></p>
+                <div class="detail-section"><dl class="kv">
+                    <dt>Path</dt><dd>${escapeHtml(artifact.rel_path || '—')}</dd>
+                    <dt>Content hash</dt><dd>${escapeHtml(r.content_hash || '—')}</dd>
+                    <dt>Stamped</dt><dd>${escapeHtml(r.stamped_at || '—')}</dd>
+                </dl></div>
+                ${recipe}
             `);
         }
 

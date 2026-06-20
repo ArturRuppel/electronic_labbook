@@ -287,6 +287,37 @@ full unit tests added. The design spec and implementation plan
 (`docs/superpowers/{specs,plans}/2026-06-20-notebooks*.md`) were executed and
 removed from the working tree (kept in git history, per the plan's final step).
 
+## ✅ 6. Interface to commit (stamp) artifacts — DONE (CLI + SDGL rendering)
+
+**Decision (user):** CLI subcommand. Plus: committed artifacts get special
+rendering in the SDGL explorer.
+
+**Done — two parts:**
+
+1. **`labbook stamp` CLI** (`eln/cli.py`): wraps `eln.analysis.stamp`, so an
+   artifact can be committed without writing Python. The file on disk is never
+   touched; it becomes a `dataset` node with a `generates` edge carrying the recipe.
+   - `labbook stamp <path> [--function NAME] [--param K=V ...] [--input P ...]
+     [--notebook P] [--produced-by experiment:CODE-NN]`
+   - `labbook stamp <path> --kind curated --tool T --method M`
+   - `--param` values decode as JSON literals when possible (numbers/bools), else
+     strings. Errors (uninferable producer, curated missing tool/method, missing
+     file) exit non-zero. Tests in `tests/test_cli.py`.
+
+2. **Special rendering in SDGL** (`eln/sdgl/engine.py` + `catalog/sdgl.html`):
+   committed artifacts are surfaced distinctly from raw scanned files.
+   - `tree()` now attaches `rep["artifacts"]` via a new `_stamped_artifacts()`
+     helper (outgoing `generates` edges → dataset node + full recipe);
+     `_linked_entities()` skips `generates` edges so artifacts aren't also shown as
+     generic links. Tests: `tests/sdgl/test_tree_artifacts.py`.
+   - The explorer renders each as an `artifactRow` (🔏 icon, dataset color, a
+     derived/curated badge) and a `detailArtifact` pane showing the provenance
+     recipe (function, library/data commits, params, input fingerprints, or
+     tool/method). Flows through to the **static bundle** for free, since the
+     export dumps `tree()` to `sdgl_data.json` and copies `sdgl.html`.
+
+<details><summary>original gap analysis</summary>
+
 ## 6. No interface to commit (stamp) artifacts
 
 **Confirmed gap:** there is currently **no interface to commit/record an
@@ -314,3 +345,5 @@ notebooks/SDGL page to stamp a produced file. The notebooks provenance panel
 (item 5) already *reads* `generates` edges, so a "commit/stamp this artifact"
 affordance there is a natural home. Decide CLI vs. UI (or both) and the curated
 vs. derived entry path before implementing.
+
+</details>
