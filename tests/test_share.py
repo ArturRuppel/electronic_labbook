@@ -66,6 +66,10 @@ def data_root(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("LABBOOK_CONFIG", str(cfg))
     SDGL(root).scan_from_config()
+    # A real data repo carries experiments.sql (the source of truth the db is
+    # built from); dump it so the CLI's _ensure_db is a realistic no-op.
+    from eln.db.dump_db import dump
+    dump(db, root / "experiments.sql")
     return root
 
 
@@ -237,3 +241,14 @@ def test_export_all_deterministic(data_root, tmp_path):
             if not (fb.is_file() and filecmp.cmp(fa, fb, shallow=False)):
                 mismatches.append(str(fa.relative_to(a)))
     assert mismatches == []
+
+
+def test_cli_export_all(data_root, tmp_path, monkeypatch):
+    from eln.cli import build_parser, cmd_export
+    dest = tmp_path / "out"
+    cfg = data_root / "labbook.toml"
+    monkeypatch.setenv("LABBOOK_CONFIG", str(cfg))
+    args = build_parser().parse_args(["export", "--all", "--dest", str(dest)])
+    rc = cmd_export(args)
+    assert rc == 0
+    assert (dest / "index.html").is_file()
