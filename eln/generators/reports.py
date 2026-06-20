@@ -411,6 +411,17 @@ def parse_series(content):
     return m.group(1) if m else None
 
 
+def lookup_series_title(code, eln_conn):
+    """Canonical title for a series ``code`` from ``experiment_codes``, or None
+    when no code is given or it isn't a known series."""
+    if not code:
+        return None
+    row = eln_conn.execute(
+        "SELECT title FROM experiment_codes WHERE code = ?", (code,)
+    ).fetchone()
+    return row["title"] if row else None
+
+
 def _chips(items):
     """Render a list of strings as tag chips, matching the catalog styling."""
     items = [i for i in items if i]
@@ -639,12 +650,15 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
 
             html_content = markdown_to_html(content)
 
+            # The declared series ('**Series:** CODE') is the single coverage
+            # signal, shared by the card title below and the {{experiments}} block.
+            series_code = parse_series(content)
+
             # Inject the DB-generated experiment overview where the author placed
             # the {{experiments}} token. The token survives markdown conversion as
             # literal text, so we substitute here (post-escaping) to keep the
             # generated HTML intact. No token → pass-through (e.g. Bluesky thread).
             if PLACEHOLDER in html_content:
-                series_code = parse_series(content)
                 if series_code:
                     block = build_experiments_block(series_code, eln_conn, sdgl_conn)
                 else:
@@ -659,9 +673,17 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
                 else:
                     html_content = html_content.replace(PLACEHOLDER, block)
 
-            # Extract title from first H1 heading, fall back to filename
-            title_match = re.search(r'^# (.+)$', content, re.MULTILINE)
-            title = title_match.group(1).strip() if title_match else report_file.stem.replace('_', ' ').replace('-', ' ').title()
+            # Card title: a series-linked report uses the canonical experiment
+            # identity ("CODE — title" from experiment_codes) so the header matches
+            # the Experiments page; the markdown H1 is ignored for the header (it
+            # still renders in the body). Reports with no series — or an unknown
+            # series code — fall back to the H1, then the filename.
+            series_title = lookup_series_title(series_code, eln_conn)
+            if series_title:
+                title = f"{series_code} — {series_title}"
+            else:
+                title_match = re.search(r'^# (.+)$', content, re.MULTILINE)
+                title = title_match.group(1).strip() if title_match else report_file.stem.replace('_', ' ').replace('-', ' ').title()
             slug = report_file.stem
             
             # Auto-populate date from related experiments or file metadata

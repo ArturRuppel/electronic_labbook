@@ -60,14 +60,38 @@ data, and committing it records the recipe that connects the two. Experiment
 notebooks and analysis code live in the **data repo**, alongside the curated
 artifacts they produce; only the *reusable* analysis library ships with this
 public code repo (`eln/analysis/`). That library carries a `stamp()` /
-`verify_provenance()` pair that records each connection *as a graph relationship
-in SDGL* — the producing code's commit and function, the data-repo commit and
-notebook path, the parameters, and the content hashes of the input files —
-without touching the files themselves. `verify_provenance()` then flags any
-artifact that has drifted from the state it was stamped in.
+`verify_provenance()` pair for recording and checking that connection.
 
-> The classification and the provenance machinery are in place; the notebook
-> *authoring* workflow on top of them is still being built out.
+### Stamping derived data
+
+Calling `stamp(path, ...)` on a derived artifact records its provenance **as a
+graph relationship in SDGL, never as file metadata** — the artifact on disk is
+left byte-for-byte untouched. The artifact becomes a `dataset` node, and the
+recipe is attached as metadata on a `generates` edge from the producing
+experiment (inferred from the `CODE-NN` folder in the path, or passed
+explicitly). A stamp distinguishes two kinds:
+
+- **`kind="derived"`** (automatic outputs) records the full reproduction recipe:
+  the library repo, commit, and function that produced it; the data-repo commit
+  and notebook path; the call parameters; and the SHA-256 content hashes of every
+  input file. Inputs that are themselves stamped get a `derived_from` edge, so the
+  lineage is walkable in the graph.
+- **`kind="curated"`** (human-made artifacts) records the `tool` and `method`
+  instead of a code recipe, plus the data-repo commit of the file itself.
+
+Every stamp also stores the artifact's own content hash and a UTC timestamp.
+Because the recipe is *references only* (commits, dotted function names, parameter
+values, input fingerprints) and never source code, the recipe itself stays in
+git, where it can be diffed and recovered.
+
+`verify_provenance()` re-hashes every stamped artifact on disk and flags any that
+has drifted from the state it was stamped in — `modified` (content differs from
+the recorded hash) or `missing` (the file is gone). It is also exposed by the
+server at `/api/sdgl/provenance/verify`.
+
+> The classification and the provenance machinery are in place; `stamp()` is a
+> library call invoked from notebooks (there is no `labbook stamp` CLI yet), and
+> the notebook *authoring* workflow on top of it is still being built out.
 
 ## SDGL — the Scientific Data Graph Layer
 

@@ -262,6 +262,21 @@ def test_report_card_has_data_src(data_root, tmp_path):
     assert 'data-report-src="reports/weekly/tfm_progress.md"' in html
 
 
+def test_report_card_title_uses_series_identity(data_root, tmp_path):
+    """A series-linked report's card header is 'CODE — canonical title' (from
+    experiment_codes), not its markdown H1; a standalone report keeps its H1."""
+    from eln.generators.reports import generate_reports
+    out = tmp_path / "c"
+    generate_reports(data_root, catalog_out=out)
+    html = (out / "reports.html").read_text()
+    # tfm_progress.md declares '**Series:** TFMSP'; TFMSP -> 'Traction Force'.
+    assert "TFMSP — Traction Force" in html
+    # The free-form H1 still renders in the body, just not as the header title.
+    assert "<h1>TFM progress</h1>" in html
+    # notes.md has no series, so it falls back to its H1.
+    assert "Random notes" in html
+
+
 def test_presentation_row_has_data_dir(data_root, tmp_path):
     from eln.generators.presentations import generate_presentations
     out = tmp_path / "c"
