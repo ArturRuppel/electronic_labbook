@@ -71,6 +71,46 @@ def test_publish_missing_db_returns_error(tmp_path):
     assert "not found" in result["error"].lower()
 
 
+def test_publish_creates_timestamp_when_cfg_enabled(data_repo, monkeypatch):
+    from eln import timestamp
+    monkeypatch.setattr(timestamp, "request_timestamp", lambda d, **k: b"TOKEN")
+    monkeypatch.setattr(timestamp, "verify_token",
+                        lambda *a, **k: {"valid": True, "gen_time": "T", "reason": None})
+    cfg = {"enabled": True, "tsa_url": "https://t.example/tsr",
+           "cert_bytes": b"CERT",
+           "paths": ["experiments.sql", "reports", "timestamps"]}
+
+    result = publish(data_repo, push=False, timestamp_cfg=cfg)
+    assert result["success"] is True
+
+    idx = timestamp.read_index(data_repo)
+    assert len(idx) == 1 and idx[0]["status"] == "ok"
+    tracked = subprocess.run(["git", "ls-files"], cwd=str(data_repo),
+                             capture_output=True, text=True).stdout
+    assert "timestamps/index.jsonl" in tracked  # token artifacts committed
+
+
+def test_publish_timestamp_pending_does_not_block(data_repo, monkeypatch):
+    from eln import timestamp
+
+    def boom(d, **k):
+        raise OSError("offline")
+
+    monkeypatch.setattr(timestamp, "request_timestamp", boom)
+    cfg = {"enabled": True, "tsa_url": "https://t.example/tsr",
+           "cert_bytes": b"CERT", "paths": ["experiments.sql", "timestamps"]}
+
+    result = publish(data_repo, push=False, timestamp_cfg=cfg)
+    assert result["success"] is True  # publish still succeeds
+    assert timestamp.read_index(data_repo)[0]["status"] == "pending"
+
+
+def test_publish_without_timestamp_cfg_is_unchanged(data_repo):
+    result = publish(data_repo, push=False)  # no timestamp_cfg -> no timestamping
+    assert result["success"] is True
+    assert (data_repo / "timestamps").exists() is False
+
+
 def test_publish_rejects_oversized_staged_file(data_repo):
     """A staged file >90 MB hard-fails the publish and is never committed."""
     big = data_repo / "reports" / "huge.bin"

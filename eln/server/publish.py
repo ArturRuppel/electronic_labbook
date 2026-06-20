@@ -16,7 +16,8 @@ from eln.sdgl import allocate_experiment_codes
 
 # Tracked, diffable data committed on publish. The binary experiments.db / sdgl.db
 # are build artifacts and stay gitignored in the data repo.
-PUBLISH_PATHS = ["experiments.sql", "reports", "presentations", "thumbnails"]
+PUBLISH_PATHS = ["experiments.sql", "reports", "presentations", "thumbnails",
+                 "timestamps"]
 
 # Reject any single staged file above this size so committing bulk media to git
 # stays sustainable (large data belongs in the backup flow, not git history).
@@ -53,7 +54,8 @@ def _repo_size_bytes(root):
     return 0
 
 
-def publish(root, eln_db_path=None, *, push=True, remote="origin", branch="main"):
+def publish(root, eln_db_path=None, *, push=True, remote="origin", branch="main",
+            timestamp_cfg=None):
     """Materialize → dump → commit → push the data repo at ``root``.
 
     Returns a result dict with ``success``/``message`` (and, on git failure,
@@ -71,6 +73,14 @@ def publish(root, eln_db_path=None, *, push=True, remote="origin", branch="main"
 
     # 2. Dump the database to its diffable form inside the data repo.
     dump(db_path, root / "experiments.sql")
+
+    # 2b. Best-effort trusted timestamp over the snapshot (Roadmap step 11,
+    #     layer 3). A TSA failure records a "pending" entry but never blocks the
+    #     publish; the token/manifest/index land under timestamps/ (in
+    #     PUBLISH_PATHS) and are committed with the rest below.
+    if timestamp_cfg and timestamp_cfg.get("enabled", True):
+        from eln import timestamp as _ts
+        _ts.create_timestamp(root, timestamp_cfg["paths"], timestamp_cfg)
 
     # 3. Stage the diffable data that actually exists.
     paths = [p for p in PUBLISH_PATHS if (root / p).exists()]
