@@ -1,6 +1,72 @@
 """Static-bundle export (Roadmap step 12): helpers, full/single export, CLI."""
 
+import os
+import sqlite3
+from datetime import datetime
+
+import pytest
+
+from eln.db import init_db
+from eln.sdgl import SDGL
 from eln.share import _local_refs, _staticize, _strip_nav, _collect_assets
+
+
+def _touch(path, ts):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x")
+    os.utime(path, (ts, ts))
+
+
+@pytest.fixture
+def data_root(tmp_path, monkeypatch):
+    """A data-repo root (mirrors tests/generators/test_generate.py): experiments.db,
+    an SDGL scan over a CODE-NN tree, two reports, and one presentation. Returns the
+    root Path (a subdir of tmp_path, so test bundles can sit beside it)."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    db = root / "experiments.db"
+    init_db.init_db(db)
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO experiment_codes (title, code) VALUES ('Traction Force', 'TFMSP')")
+    conn.execute("INSERT INTO experiments (id, experiment_type, repetition, excluded, file_path, "
+                 "cell_types, microscope) VALUES (1,'Traction Force',1,0,'x','HUVEC','Spinning disk')")
+    conn.execute("INSERT INTO experiments (id, experiment_type, repetition, excluded, file_path) "
+                 "VALUES (2,'Traction Force',2,0,'x')")
+    conn.execute("INSERT INTO protocols (id, name, version, description, content, is_latest) "
+                 "VALUES (10,'Gel casting','2','How to cast','# Gel casting\n\nMix **A** and B.',1)")
+    conn.execute("INSERT INTO experiment_protocols (experiment_id, protocol_id) VALUES (1, 10)")
+    conn.execute("INSERT INTO tags (id, name) VALUES (5, 'migration')")
+    conn.execute("INSERT INTO experiment_tags (experiment_id, tag_id) VALUES (1, 5)")
+    conn.execute("INSERT INTO experiment_channels (experiment_id, channel_order, channel_label, "
+                 "target, modality) VALUES (1, 0, 'Blue', 'F-actin', 'Fluorescence')")
+    conn.commit()
+    conn.close()
+
+    data = root / "data"
+    _touch(data / "TFMSP-01" / "raw" / "img.tif", datetime(2025, 3, 10, 12, 0).timestamp())
+    _touch(data / "TFMSP-02" / "raw" / "img.tif", datetime(2025, 4, 15, 9, 0).timestamp())
+
+    reports = root / "reports"
+    (reports / "weekly").mkdir(parents=True)
+    (reports / "weekly" / "tfm_progress.md").write_text(
+        "# TFM progress\n\n**Series:** TFMSP\n\n**Date:** 2025-03-10\n\n{{experiments}}\n\nLooking good.\n"
+    )
+    (reports / "notes.md").write_text("# Random notes\n\nNo series here.\n")
+
+    pres = root / "presentations" / "2025-05-01_Lab_meeting"
+    pres.mkdir(parents=True)
+    (pres / "index.html").write_text('<html><img src="slides/1.png"></html>')
+    (pres / "slides").mkdir()
+    (pres / "slides" / "1.png").write_bytes(b"x")
+
+    cfg = root / "labbook.toml"
+    cfg.write_text(
+        f'data_root = "{root}"\n\n[scanner]\nrun_on_startup = false\n\n'
+        '[[scan_roots]]\nname = "data"\npath = "data"\n'
+    )
+    monkeypatch.setenv("LABBOOK_CONFIG", str(cfg))
+    SDGL(root).scan_from_config()
+    return root
 
 
 def test_local_refs_keeps_relative_skips_external():
@@ -92,3 +158,27 @@ def test_collect_assets_reports_missing(tmp_path):
     seen, missing, total = _collect_assets(start, root, dest, generated=set())
     assert missing == ["reports/gone.png"]
     assert total == 0
+
+
+def test_export_all_layout_and_staticized(data_root, tmp_path):
+    from eln.share import export_all
+    dest = tmp_path / "bundle"
+    result = export_all(data_root, dest)
+    for page in ["index.html", "experiments.html", "protocols.html",
+                 "reports.html", "presentations.html"]:
+        assert (dest / page).is_file(), page
+    home = (dest / "index.html").read_text()
+    assert 'href="/"' not in home and "auth.js" not in home
+    nav_page = (dest / "experiments.html").read_text()
+    assert ">Data Graph<" not in nav_page          # server-only link dropped
+    assert ">Experiments<" in nav_page             # nav otherwise intact
+    assert (dest / "presentations" / "2025-05-01_Lab_meeting"
+                 / "slides" / "1.png").is_file()
+    assert result["files"] >= 1 and result["bytes"] >= 1
+
+
+def test_export_all_refuses_dest_inside_root(data_root):
+    from eln.share import _assert_dest_outside_root
+    with pytest.raises(ValueError):
+        _assert_dest_outside_root(data_root / "reports" / "out", data_root)
+    _assert_dest_outside_root(data_root.parent / "out", data_root)

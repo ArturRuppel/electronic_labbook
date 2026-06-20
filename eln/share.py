@@ -13,6 +13,8 @@ import re
 import shutil
 from pathlib import Path
 
+from eln.generators import generate_all
+
 # Refs we never copy: external, in-page, or inline data URIs.
 _EXTERNAL = re.compile(r"^(?:[a-z]+:|//|#)")
 _REF = re.compile(r'(?:src|href)="([^"]+)"')
@@ -86,3 +88,37 @@ def _collect_assets(start_pages, root, dest, generated):
             elif not (dest / rel).exists():
                 missing.append(rel)
     return seen, missing, total
+
+
+def _assert_dest_outside_root(dest, root):
+    """Refuse a destination inside the data-repo tree (so an export can't land in
+    reports/ and get published). Raises ValueError; otherwise returns resolved dest."""
+    dest, root = Path(dest).resolve(), Path(root).resolve()
+    if dest == root or root in dest.parents:
+        raise ValueError(f"export destination {dest} is inside the data repo {root}")
+    return dest
+
+
+def export_all(root, dest):
+    """Write the full static catalog bundle to ``dest``. Returns a result dict
+    ``{files, bytes, missing}``."""
+    root = Path(root)
+    dest = _assert_dest_outside_root(dest, root)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    # 1. Render every catalog page straight into the bundle (flat at root).
+    written = generate_all(root, catalog_out=dest)
+
+    # 2. Staticize each generated page in place + collect them as walk seeds.
+    generated = set()
+    start_pages = []
+    for path in written.values():
+        rel = Path(path).name
+        generated.add(rel)
+        text = _staticize(Path(path).read_text())
+        Path(path).write_text(text)
+        start_pages.append(("", text))
+
+    # 3. Transitively copy referenced assets.
+    _seen, missing, total = _collect_assets(start_pages, root, dest, generated)
+    return {"files": len(_seen) - len(generated), "bytes": total, "missing": missing}
