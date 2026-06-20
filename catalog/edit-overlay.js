@@ -154,6 +154,18 @@
             a.style.marginLeft = '1rem';
             a.onclick = function(e) { e.stopPropagation(); };
             header.appendChild(a);
+
+            var ex = document.createElement('a');
+            ex.className = 'eln-edit-btn';
+            ex.textContent = 'Export';
+            ex.href = '#';
+            ex.style.marginLeft = '0.5rem';
+            ex.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                runExport('protocol', id, 'protocol');
+            });
+            header.appendChild(ex);
         });
     }
 

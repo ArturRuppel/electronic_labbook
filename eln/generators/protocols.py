@@ -348,11 +348,15 @@ PROTOCOLS_HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def generate_protocol_catalog(root, catalog_out=None, plugins=None):
+def generate_protocol_catalog(root, catalog_out=None, plugins=None, only=None,
+                              output_name="protocols.html"):
     """Generate ``protocols.html`` from the notebook DB under *root*.
 
     Output is written to *catalog_out* (default ``root/catalog``).
-    *plugins* (default: discovered) supply extra nav links.
+    *plugins* (default: discovered) supply extra nav links. *only* (a protocol id,
+    matching the ``data-group`` / latest version id of a protocol group) restricts
+    the page to that single protocol — used by the static-bundle export — and
+    *output_name* names the output file.
     """
     root = Path(root)
     database_path = root / DEFAULT_DB_NAME
@@ -387,6 +391,15 @@ def generate_protocol_catalog(root, catalog_out=None, plugins=None):
             if name not in protocol_groups:
                 protocol_groups[name] = []
             protocol_groups[name].append(protocol)
+
+        # Single-protocol export: keep only the group whose latest version's id
+        # matches `only` (the id carried on the .protocol-group element).
+        if only is not None:
+            protocol_groups = {
+                name: versions
+                for name, versions in protocol_groups.items()
+                if str(next((p for p in versions if p['is_latest']), versions[0])['id']) == str(only)
+            }
 
         # Generate HTML for each protocol group
         protocols_html_list = []
@@ -447,7 +460,7 @@ def generate_protocol_catalog(root, catalog_out=None, plugins=None):
 
     # Write to file
     catalog_dir.mkdir(parents=True, exist_ok=True)
-    output_file = catalog_dir / "protocols.html"
+    output_file = catalog_dir / output_name
     output_file.write_text(html)
 
     print(f"Protocol catalog generated at: {output_file}")

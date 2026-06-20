@@ -164,6 +164,21 @@ zero extra wiring — and rendered by the existing `{{experiments}}` path. Concr
   overwritten on regeneration (e.g. a generated block delimited by markers, with a
   free-text section the generator never touches).
 
+## ✅ 4. Add a per-protocol export button (mirror reports & presentations) — DONE
+
+**Done.** Implemented as planned:
+1. `generate_protocol_catalog` gained `only=<protocol id>` + `output_name=`
+   (filters to the group whose latest-version id matches).
+2. `export_item` has a `"protocol"` branch: renders that one protocol flat as
+   `index.html`, nav stripped, assets walked; unknown id → `ValueError`.
+3. `/api/export/preview` and `/api/export/start` accept `"protocol"`.
+4. `edit-overlay.js` adds an **Export** button per `.protocol-group` header
+   (`runExport('protocol', id, 'protocol')`, with `stopPropagation`).
+5. Tests added in `tests/test_share.py` (only-one render, flat-no-nav export,
+   not-found). Fixture gained a second protocol to prove filtering.
+
+<details><summary>original plan</summary>
+
 ## 4. Add a per-protocol export button (mirror reports & presentations)
 
 **Goal:** each protocol on `protocols.html` should get an **Export** button, the
@@ -198,6 +213,8 @@ same way reports and presentations already do.
    `.protocol-group` that calls `runExport('protocol', group.id, 'protocol')`
    (and `stopPropagation` like the Edit button).
 5. **Tests:** mirror the report/presentation export tests in `tests/test_share.py`.
+
+</details>
 
 ## 5. Build the notebooks feature
 

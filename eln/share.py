@@ -14,6 +14,7 @@ import shutil
 from pathlib import Path
 
 from eln.generators import generate_all
+from eln.generators.protocols import generate_protocol_catalog
 from eln.generators.reports import generate_reports
 
 # Refs we never copy: external, in-page, or inline data URIs.
@@ -190,11 +191,13 @@ _REDIRECT = ('<!doctype html><meta charset="utf-8">'
 
 
 def export_item(root, dest, kind, ident):
-    """Write a standalone bundle for a single ``report`` or ``presentation``.
+    """Write a standalone bundle for a single ``report``, ``presentation`` or
+    ``protocol``.
 
     ``ident`` is the report path relative to ``root`` (e.g.
-    ``reports/weekly/tfm_progress.md``) or the presentation directory name under
-    ``presentations/``. Returns ``{files, bytes, missing}``.
+    ``reports/weekly/tfm_progress.md``), the presentation directory name under
+    ``presentations/``, or the protocol id (the latest version's id). Returns
+    ``{files, bytes, missing}``.
     """
     root = Path(root)
     dest = _assert_dest_outside_root(dest, root)
@@ -205,6 +208,16 @@ def export_item(root, dest, kind, ident):
         path = generate_reports(root, catalog_out=dest, only=ident,
                                 output_name="index.html")
         html = _strip_nav(_staticize(Path(path).read_text()))
+        Path(path).write_text(html)
+        _seen, missing, _total = _collect_assets([("", html)], root, dest,
+                                                 generated={"index.html"} | _CATALOG_PAGES)
+    elif kind == "protocol":
+        # Render just this protocol flat at the bundle root as index.html, nav-less.
+        path = generate_protocol_catalog(root, catalog_out=dest, only=ident,
+                                         output_name="index.html")
+        html = _strip_nav(_staticize(Path(path).read_text()))
+        if 'class="protocol-group"' not in html:
+            raise ValueError(f"protocol not found: {ident}")
         Path(path).write_text(html)
         _seen, missing, _total = _collect_assets([("", html)], root, dest,
                                                  generated={"index.html"} | _CATALOG_PAGES)

@@ -403,7 +403,7 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
             try:
                 if mode == "all":
                     result = export_all(root, tmp)
-                elif mode in ("report", "presentation"):
+                elif mode in ("report", "presentation", "protocol"):
                     result = export_item(root, tmp, mode, data.get("id", ""))
                 else:
                     return jsonify({"error": f"bad mode: {mode}"}), 400
@@ -424,7 +424,7 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         try:
             if mode == "all":
                 result = export_all(root, dest)
-            elif mode in ("report", "presentation"):
+            elif mode in ("report", "presentation", "protocol"):
                 result = export_item(root, dest, mode, data.get("id", ""))
             else:
                 return jsonify({"error": f"bad mode: {mode}"}), 400

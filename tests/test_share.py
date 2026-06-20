@@ -34,6 +34,8 @@ def data_root(tmp_path, monkeypatch):
                  "VALUES (2,'Traction Force',2,0,'x')")
     conn.execute("INSERT INTO protocols (id, name, version, description, content, is_latest) "
                  "VALUES (10,'Gel casting','2','How to cast','# Gel casting\n\nMix **A** and B.',1)")
+    conn.execute("INSERT INTO protocols (id, name, version, description, content, is_latest) "
+                 "VALUES (11,'Staining','1','How to stain','# Staining\n\nAdd **dye**.',1)")
     conn.execute("INSERT INTO experiment_protocols (experiment_id, protocol_id) VALUES (1, 10)")
     conn.execute("INSERT INTO tags (id, name) VALUES (5, 'migration')")
     conn.execute("INSERT INTO experiment_tags (experiment_id, tag_id) VALUES (1, 5)")
@@ -227,6 +229,35 @@ def test_export_item_report_flat_no_nav(data_root, tmp_path):
     assert '<div class="nav">' not in index   # standalone, nav stripped
     assert "auth.js" not in index
     assert result["missing"] == []
+
+
+def test_generate_protocol_catalog_only_one(data_root, tmp_path):
+    from eln.generators.protocols import generate_protocol_catalog
+    out_dir = tmp_path / "out"
+    path = generate_protocol_catalog(data_root, catalog_out=out_dir, only="10",
+                                     output_name="one.html")
+    assert path.name == "one.html"
+    html = path.read_text()
+    assert "Gel casting" in html      # the selected protocol
+    assert "Staining" not in html     # the other protocol excluded
+
+
+def test_export_item_protocol_flat_no_nav(data_root, tmp_path):
+    from eln.share import export_item
+    dest = tmp_path / "proto"
+    result = export_item(data_root, dest, "protocol", "10")
+    index = (dest / "index.html").read_text()
+    assert "Gel casting" in index
+    assert "Staining" not in index
+    assert '<div class="nav">' not in index   # standalone, nav stripped
+    assert "auth.js" not in index
+    assert result["missing"] == []
+
+
+def test_export_item_protocol_not_found(data_root, tmp_path):
+    from eln.share import export_item
+    with pytest.raises(ValueError):
+        export_item(data_root, tmp_path / "x", "protocol", "9999")
 
 
 def test_export_item_presentation_mirrored_with_redirect(data_root, tmp_path):
