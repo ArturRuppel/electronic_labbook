@@ -188,49 +188,6 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
 
     # ==================== SCIENTIFIC DATA GRAPH LAYER ====================
 
-    @app.route("/api/sdgl/nodes", methods=["GET"])
-    def sdgl_list_nodes():
-        return jsonify(get_sdgl().list_nodes())
-
-    @app.route("/api/sdgl/nodes/<path:node_id>", methods=["GET"])
-    def sdgl_get_node(node_id):
-        node = get_sdgl().get_node(node_id)
-        if not node:
-            return jsonify({"error": "Node not found"}), 404
-        return jsonify(node)
-
-    @app.route("/api/sdgl/nodes", methods=["POST"])
-    def sdgl_create_node():
-        data = request.json or {}
-        try:
-            return jsonify(get_sdgl().create_node(data)), 201
-        except (KeyError, ValueError) as e:
-            return jsonify({"error": str(e)}), 400
-
-    @app.route("/api/sdgl/nodes/<path:node_id>", methods=["DELETE"])
-    def sdgl_delete_node(node_id):
-        if get_sdgl().delete_node(node_id):
-            return jsonify({"success": True, "message": "Node deleted"})
-        return jsonify({"error": "Node not found"}), 404
-
-    @app.route("/api/sdgl/edges", methods=["GET"])
-    def sdgl_list_edges():
-        return jsonify(get_sdgl().list_edges())
-
-    @app.route("/api/sdgl/edges", methods=["POST"])
-    def sdgl_create_edge():
-        data = request.json or {}
-        try:
-            return jsonify(get_sdgl().create_edge(data)), 201
-        except (KeyError, ValueError) as e:
-            return jsonify({"error": str(e)}), 400
-
-    @app.route("/api/sdgl/edges/<path:edge_id>", methods=["DELETE"])
-    def sdgl_delete_edge(edge_id):
-        if get_sdgl().delete_edge(edge_id):
-            return jsonify({"success": True, "message": "Edge deleted"})
-        return jsonify({"error": "Edge not found"}), 404
-
     @app.route("/api/sdgl/provenance/verify", methods=["GET"])
     def sdgl_verify_provenance():
         """Flag stamped artifacts whose on-disk content diverges from the
@@ -238,22 +195,9 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         from eln.analysis import verify_provenance
         return jsonify(verify_provenance(root))
 
-    @app.route("/api/sdgl/graph", methods=["GET"])
-    def sdgl_graph():
-        node_id = request.args.get("node_id")
-        try:
-            depth = int(request.args.get("depth", 1))
-        except ValueError:
-            return jsonify({"error": "depth must be an integer"}), 400
-        return jsonify(get_sdgl().graph(node_id=node_id, depth=depth))
-
     @app.route("/api/sdgl/tree", methods=["GET"])
     def sdgl_tree():
         return jsonify(get_sdgl().tree())
-
-    @app.route("/api/sdgl/locations", methods=["GET"])
-    def sdgl_locations():
-        return jsonify(get_sdgl().list_locations())
 
     @app.route("/api/sdgl/open", methods=["POST"])
     def sdgl_open_location():

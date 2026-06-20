@@ -1189,15 +1189,6 @@ class SDGL:
                     hash_max_bytes=hash_max_bytes,
                 )
 
-    def list_nodes(self):
-        self.sync_eln()
-        conn = self.connect()
-        try:
-            rows = conn.execute("SELECT * FROM nodes ORDER BY type, title, id").fetchall()
-            return [self._row_to_dict(row) for row in rows]
-        finally:
-            conn.close()
-
     def get_node(self, node_id):
         self.sync_eln()
         conn = self.connect()
@@ -1228,74 +1219,6 @@ class SDGL:
                 )
             ]
             return node
-        finally:
-            conn.close()
-
-    def create_node(self, data):
-        node_id = data.get("id") or data["type"] + ":" + stable_hash(data.get("title") or utcnow())
-        self.upsert_node(
-            node_id,
-            data["type"],
-            data.get("title"),
-            data.get("description"),
-            data.get("experiment_id"),
-            data.get("metadata") or {},
-        )
-        return self.get_node(node_id)
-
-    def delete_node(self, node_id):
-        conn = self.connect()
-        try:
-            conn.execute("DELETE FROM file_locations WHERE node_id = ?", (node_id,))
-            conn.execute("DELETE FROM edges WHERE source_id = ? OR target_id = ?", (node_id, node_id))
-            cursor = conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
-            conn.commit()
-            return cursor.rowcount > 0
-        finally:
-            conn.close()
-
-    def list_edges(self):
-        self.sync_eln()
-        conn = self.connect()
-        try:
-            return [
-                self._row_to_dict(row)
-                for row in conn.execute("SELECT * FROM edges ORDER BY relation_type, source_id, target_id")
-            ]
-        finally:
-            conn.close()
-
-    def create_edge(self, data):
-        edge_id = self.upsert_edge(
-            data["source_id"],
-            data["target_id"],
-            data["relation_type"],
-            data.get("metadata") or {},
-        )
-        conn = self.connect()
-        try:
-            return self._row_to_dict(conn.execute("SELECT * FROM edges WHERE id = ?", (edge_id,)).fetchone())
-        finally:
-            conn.close()
-
-    def delete_edge(self, edge_id):
-        conn = self.connect()
-        try:
-            cursor = conn.execute("DELETE FROM edges WHERE id = ?", (edge_id,))
-            conn.commit()
-            return cursor.rowcount > 0
-        finally:
-            conn.close()
-
-    def list_locations(self):
-        conn = self.connect()
-        try:
-            return [
-                self._row_to_dict(row)
-                for row in conn.execute(
-                    "SELECT * FROM file_locations ORDER BY exists_now DESC, root_name, path"
-                )
-            ]
         finally:
             conn.close()
 
@@ -1583,72 +1506,6 @@ class SDGL:
             key=lambda c: (not c.get("is_dir"), (c.get("name") or "").lower()),
         )
         return [to_list(child) for child in top]
-
-    def graph(self, node_id=None, depth=1):
-        self.sync_eln()
-        conn = self.connect()
-        try:
-            if not node_id:
-                nodes = [self._row_to_dict(row) for row in conn.execute("SELECT * FROM nodes ORDER BY type, title LIMIT 200")]
-                node_ids = {node["id"] for node in nodes}
-                edges = [
-                    self._row_to_dict(row)
-                    for row in conn.execute("SELECT * FROM edges ORDER BY relation_type, source_id, target_id LIMIT 400")
-                    if row["source_id"] in node_ids and row["target_id"] in node_ids
-                ]
-                self._annotate_location_counts(conn, nodes)
-                return {"nodes": nodes, "edges": edges}
-
-            visited = {node_id}
-            frontier = {node_id}
-            selected_edges = {}
-            for _ in range(max(0, int(depth))):
-                next_frontier = set()
-                placeholders = ",".join("?" for _ in frontier)
-                query = (
-                    "SELECT * FROM edges WHERE source_id IN ({0}) OR target_id IN ({0})"
-                ).format(placeholders)
-                rows = conn.execute(query, tuple(frontier) + tuple(frontier)).fetchall()
-                for row in rows:
-                    selected_edges[row["id"]] = self._row_to_dict(row)
-                    for endpoint in (row["source_id"], row["target_id"]):
-                        if endpoint not in visited:
-                            visited.add(endpoint)
-                            next_frontier.add(endpoint)
-                frontier = next_frontier
-                if not frontier:
-                    break
-            placeholders = ",".join("?" for _ in visited)
-            nodes = [
-                self._row_to_dict(row)
-                for row in conn.execute(
-                    f"SELECT * FROM nodes WHERE id IN ({placeholders}) ORDER BY type, title",
-                    tuple(visited),
-                )
-            ]
-            self._annotate_location_counts(conn, nodes)
-            return {"nodes": nodes, "edges": list(selected_edges.values())}
-        finally:
-            conn.close()
-
-    @staticmethod
-    def _annotate_location_counts(conn, nodes):
-        """Attach a location_count to each node so the graph view can show
-        filesystem affordances without a detail fetch per node."""
-        if not nodes:
-            return
-        ids = [node["id"] for node in nodes]
-        placeholders = ",".join("?" for _ in ids)
-        counts = {
-            row["node_id"]: row["location_count"]
-            for row in conn.execute(
-                f"SELECT node_id, COUNT(*) AS location_count FROM file_locations "
-                f"WHERE node_id IN ({placeholders}) GROUP BY node_id",
-                tuple(ids),
-            )
-        }
-        for node in nodes:
-            node["location_count"] = counts.get(node["id"], 0)
 
     @staticmethod
     def _row_to_dict(row):
