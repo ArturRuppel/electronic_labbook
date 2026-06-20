@@ -186,6 +186,29 @@ def cmd_backup(args):
     return 0
 
 
+def cmd_export(args):
+    """Write a self-contained static HTML bundle (Roadmap step 12): the whole
+    catalog, a single report, or a single presentation, to --dest."""
+    from eln.share import export_all, export_item
+
+    config = _load(args)
+    _ensure_db(config)
+    if args.all:
+        result = export_all(config.data_root, args.dest)
+    elif args.report:
+        result = export_item(config.data_root, args.dest, "report", args.report)
+    elif args.presentation:
+        result = export_item(config.data_root, args.dest, "presentation", args.presentation)
+    else:
+        print("nothing to export: pass --all, --report ID, or --presentation ID",
+              file=sys.stderr)
+        return 1
+    print(f"Exported {result['files']} files ({result['bytes']:,} bytes) to {args.dest}")
+    for rel in result["missing"]:
+        print(f"  WARNING missing referenced asset (skipped): {rel}", file=sys.stderr)
+    return 0
+
+
 # ---- parser --------------------------------------------------------------
 
 def build_parser():
@@ -230,6 +253,14 @@ def build_parser():
     p.add_argument("--port", type=int, default=5000)
     p.add_argument("--no-browser", action="store_true", help="do not open a browser")
     p.set_defaults(func=cmd_backup)
+
+    p = sub.add_parser("export", help="write a self-contained static HTML bundle")
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--all", action="store_true", help="export the whole catalog")
+    g.add_argument("--report", help="export a single report (path under reports/)")
+    g.add_argument("--presentation", help="export a single presentation (dir name)")
+    p.add_argument("--dest", required=True, help="output folder for the bundle")
+    p.set_defaults(func=cmd_export)
 
     return parser
 
