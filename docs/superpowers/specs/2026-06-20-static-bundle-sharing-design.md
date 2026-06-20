@@ -35,14 +35,23 @@ the bundle root alongside the referenced `reports/`, `presentations/`,
 The generated catalog pages are already free of authoring chrome: the
 edit-overlay and admin scripts are injected **at serve time** by
 `eln/server/app.py` (`serve_html_with_overlay`), not baked into the generated
-files. The only server-only elements a static page carries are:
+files. The only server-only elements a static page carries are three **fixed,
+known literals**:
 
-- the **Data Graph** nav link / home-page card (`href="/"`, the API-driven graph
-  view — dead without a server), and
-- the `auth.js` script tag (the live server already strips this locally).
+- the **Data Graph** nav link (`        <a href="/">Data Graph</a>`, emitted by
+  `render_nav`) and the matching home-page **Data Graph card** (`<a href="/"
+  class="card">…</a>`) — the API-driven graph view, dead without a server, and
+- the `auth.js` script tag (`<script src="auth.js"></script>`; the live server
+  already strips this locally).
 
-Both are neutralized by rendering in a **static mode** (see below), not by
-post-hoc string surgery.
+A small **`_staticize()` post-process** in `eln/share.py` removes exactly these
+three literals from each emitted page. This is deliberately *not* the fragile
+media-link surgery the spec's architecture warns against — those are stable
+structural strings, and media links (`reports/…`, `presentations/…`) are left
+untouched. The post-process is preferred over a `static=True` generator flag
+because it applies **uniformly to core *and* plugin pages** (presentations is a
+plugin whose `generate(root, catalog_out)` interface carries no such flag), and
+it touches **zero generator files**.
 
 ## Decisions
 
@@ -57,7 +66,7 @@ post-hoc string surgery.
 | Bundle layout | **Flat**, mirroring the served URL space — preserves relative links with zero rewriting. |
 | Asset selection | **Reference-walk**: copy only files the emitted HTML links. Auto-drops source/build cruft. |
 | Movie transcode | **None** — the corpus is already `.mp4`. Out of scope. |
-| Architecture | **Reuse the generators in a `static=True` mode** + an asset-walk orchestrator (`eln/share.py`). Not a post-hoc rewrite, not a separate static-site generator. |
+| Architecture | **Asset-walk orchestrator (`eln/share.py`)** that reuses the existing generators unchanged, then post-processes each emitted page with `_staticize()` to drop the three server-only literals. Not a generator-flag rewrite, not a separate static-site generator. Touches zero generator files. |
 
 ## Components & boundaries
 
@@ -65,14 +74,15 @@ post-hoc string surgery.
   - `export_all(root, dest)` → writes the full static catalog bundle to `dest`.
   - `export_item(root, dest, kind, ident)` → writes a standalone single
     `report` or `presentation` bundle.
-  - `_collect_assets(html, root, dest)` (internal) → walks the HTML for local
-    `src`/`href`, copies each referenced file from `root` into `dest` preserving
-    its relative subpath, and returns `(count, total_bytes, missing[])` for the
-    preview and the skip-report.
-- **`static=True` flag** threaded into `eln/generators` (`generate_all`,
-  `render_nav`, `generate_home`) — the single place that knows the Data Graph
-  view and `auth.js` are server-only. In static mode they are omitted. This is
-  the **only generator change**.
+  - `_collect_assets(start_pages, root, dest)` (internal) → a **transitive**
+    walk: for each page it finds local `src`/`href` refs, copies each referenced
+    file from `root` into `dest` preserving its relative subpath, and recurses
+    into any copied HTML (so a `presentations.html` → `presentations/X/index.html`
+    → `slides/*.png` chain is fully followed). Returns `(count, total_bytes,
+    missing[])` for the preview and the skip-report.
+  - `_staticize(html)` (internal) → removes the three server-only literals
+    (Data Graph nav link, home Data Graph card, `auth.js` script). The single
+    place that knows what is server-only; **no generator files change**.
 - **CLI** — `labbook export` (engine): `--all` | `--report ID` |
   `--presentation ID`, with `--dest PATH`.
 - **Server** — a `POST /api/export` endpoint + buttons in the authoring overlay
@@ -80,8 +90,8 @@ post-hoc string surgery.
   report/presentation), reusing the backup tool's destination picker.
 
 Each unit has one purpose and a narrow interface: the generators render pages
-(now optionally server-link-free); `eln/share.py` orchestrates render + asset
-copy; the CLI/endpoint are thin entry points over `eln/share.py`.
+**unchanged**; `eln/share.py` orchestrates render → `_staticize` → asset copy;
+the CLI/endpoint are thin entry points over `eln/share.py`.
 
 ## Bundle layout & data flow
 
@@ -101,26 +111,40 @@ dest/
 
 Open `dest/index.html` directly (`file://`) or point GitHub Pages at `dest/`.
 
-**Single-item export** (`export_item`) → standalone, nav-less:
+**Single-item export** (`export_item`) → standalone, nav-less, reachable from
+`dest/index.html`. Two layouts, because the two page kinds author their media
+refs differently:
 
 ```
+# single report — report page authors root-relative refs (reports/<sub>/…),
+# so it must sit at the bundle root as index.html:
 dest/
-  index.html          the one report/presentation, no nav bar, written as index.html
-  reports/<sub>/…      (or presentations/<sub>/…) — only this item's referenced assets
+  index.html          the one report, full nav stripped
+  reports/<sub>/…      only this report's referenced figures/movies
+
+# single presentation — the presentation's own index.html authors refs relative
+# to its own dir (slides/…), so it is mirrored at its path + a root redirect:
+dest/
+  index.html                       <meta refresh> redirect to the presentation
+  presentations/<dirname>/index.html
+  presentations/<dirname>/slides/…  only referenced assets
 ```
 
-**Shared flow:** render page(s) in static mode → for each emitted HTML, walk
-local `src`/`href` → copy each referenced file from `root` into `dest` at its
-relative subpath → tally count + bytes. External links (`http(s)://`), the
-dropped `/` graph link, and `auth.js` are skipped, so only real, referenced,
-in-tree assets are copied (this is what drops `.sh`/`.zip`/build cruft sitting
-in the source dirs).
+**Shared flow:** render/copy the start page(s) → `_staticize` each emitted
+generated page (drop the three server-only literals) → transitively walk every
+page's local `src`/`href`, copying each referenced file from `root` into `dest`
+at its relative subpath and recursing into copied HTML → tally count + bytes.
+External links (`http(s)://`, `//`, `mailto:`, `#`, `data:`) and refs to
+already-generated sibling pages are skipped, so only real, referenced, in-tree
+assets are copied (this is what drops `.sh`/`.zip`/build cruft sitting in the
+source dirs).
 
 **Single-report subtlety:** the combined `reports.html` renders *all* reports.
-For a single-report export the builder renders only that one `.md` (the
-generator already iterates per-file, so it is a filtered render), strips the
-nav, and writes it as `index.html`. Single-presentation export is the analogous
-filtered render of the presentations generator.
+For a single-report export the builder calls `generate_reports(only=<relpath>)`
+to render just that one `.md`, strips the full `<div class="nav">` block, and
+writes it as `dest/index.html`. A single presentation needs no render — its
+`presentations/<dirname>/index.html` is already a self-contained page, so the
+builder just transitively copies it and writes the root redirect.
 
 ## Destination, preview & guard
 
@@ -161,22 +185,26 @@ filtered render of the presentations generator.
   - asset-walk copies **only referenced** files — a stray `build.sh`/`.zip` in
     `reports/` is not in the bundle; a referenced `.png`/`.mp4` is, at the right
     subpath;
-  - `export_item` (report + presentation) → standalone `index.html`, no nav,
-    only that item's assets;
+  - `export_item` (report + presentation) → self-contained bundle reachable from
+    `dest/index.html`, no catalog nav, only that item's assets (a report renders
+    flat at the bundle root; a presentation is mirrored with a root redirect);
   - missing referenced asset → skipped + reported, export still succeeds;
   - relative-link integrity → every local `src`/`href` in an emitted page
     resolves to a file present in the bundle;
   - determinism → exporting twice is byte-identical.
-- **Edits:**
-  - `eln/generators/nav.py` — `render_nav(plugins, static=False)`; static mode
-    drops the Data Graph `NavLink`.
-  - `eln/generators/home.py` — static mode drops the Data Graph card.
-  - `eln/generators/__init__.py` — `generate_all(..., static=False)` threads the
-    flag to the core generators.
+- **Edits (no generator files change):**
+  - `eln/generators/reports.py` — `generate_reports(..., only=None,
+    output_name="reports.html")` so a single report can be rendered (used by
+    `export_item`); the default path is unchanged.
   - `eln/cli.py` — `export` subcommand (`--all` / `--report` / `--presentation`,
     `--dest`).
-  - `eln/server/app.py` — `POST /api/export` route + the overlay buttons it
-    serves.
+  - `eln/server/app.py` — `POST /api/export/preview` + `/api/export/start`
+    routes (mirroring the backup endpoints), reusing the folder-dialog picker.
+  - `catalog/edit-overlay.js` — an "Export catalog" toolbar button + per-item
+    "Export" buttons on report cards and presentation rows.
+  - `eln/generators/reports.py` / `eln/generators/presentations.py` — emit a
+    stable `data-*` identifier on each report card / presentation row so the
+    overlay's per-item export button knows what to request.
   - `labbook.toml.example` — document export (no required config; destination is
     chosen per call).
 
