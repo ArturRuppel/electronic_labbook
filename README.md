@@ -36,6 +36,39 @@ Three things are authoritative, each for what it is actually good at:
 Nothing is copied into a walled garden. Your data stays where it is, in the
 layout you already use.
 
+## What the notebook tracks: four kinds of content
+
+Not everything on disk deserves the same treatment. The project distinguishes
+four kinds of content, each handled according to how it came to exist and how
+replaceable it is:
+
+| Kind | Treatment | Why |
+|---|---|---|
+| **Raw data** | **Immutable** — never modified | Irreplaceable measurements; the ground truth everything else derives from. Too large for git, so it lives on the filesystem, is indexed in place by SDGL, and is backed up off-machine. |
+| **Code / notebooks** | **Versioned in git** (in the data repo) | The recipes that turn raw data into results. Every change is committed and versioned, so any result can be traced to the exact code that produced it. |
+| **Curated derived data** | **Versioned in git**, like code | Hand-made, human-judgment outputs — manual segmentations, ROIs, curated tracking. Irreproducible but revisable, so they are committed for history and recoverability — but *not* frozen, because people legitimately revise them. |
+| **Automatic derived data** | **Disposable** | Anything a notebook can regenerate deterministically from raw data plus code. Not committed and not backed up: cheaper to recompute than to store. |
+
+The dividing line for derived data is *who made the decisions in it*. If a result
+falls out of code automatically, it is disposable — the code and the raw data are
+its only durable form. If a human made irreversible judgment calls (drawing a
+mask, correcting a track), that judgment is itself a primary artifact and is
+versioned like code.
+
+**Notebooks are the link.** A notebook reads immutable raw data and writes derived
+data, and committing it records the recipe that connects the two. Experiment
+notebooks and analysis code live in the **data repo**, alongside the curated
+artifacts they produce; only the *reusable* analysis library ships with this
+public code repo (`eln/analysis/`). That library carries a `stamp()` /
+`verify_provenance()` pair that records each connection *as a graph relationship
+in SDGL* — the producing code's commit and function, the data-repo commit and
+notebook path, the parameters, and the content hashes of the input files —
+without touching the files themselves. `verify_provenance()` then flags any
+artifact that has drifted from the state it was stamped in.
+
+> The classification and the provenance machinery are in place; the notebook
+> *authoring* workflow on top of them is still being built out.
+
 ## SDGL — the Scientific Data Graph Layer
 
 SDGL is the graph index that makes the filesystem-centric model work. It scans
@@ -148,7 +181,7 @@ stays private**, and so that **no binary database is ever committed**.
 |---|---|---|
 | Host | GitHub, public | GitLab, private |
 | Contents | code only | data only |
-| Holds | engine, server, generators, schema, sample data | `experiments.sql`, reports, protocols, slides |
+| Holds | engine, server, generators, schema, the reusable analysis library, sample data | `experiments.sql`, reports, protocols, slides, experiment notebooks + analysis code, curated artifacts |
 
 `experiments.db` and `sdgl.db` are treated as build artifacts and are never
 committed. The versioned, line-diffable form is `experiments.sql`, a
