@@ -84,10 +84,12 @@ Because the recipe is *references only* (commits, dotted function names, paramet
 values, input fingerprints) and never source code, the recipe itself stays in
 git, where it can be diffed and recovered.
 
-`verify_provenance()` re-hashes every stamped artifact on disk and flags any that
-has drifted from the state it was stamped in — `modified` (content differs from
-the recorded hash) or `missing` (the file is gone). It is also exposed by the
-server at `/api/sdgl/provenance/verify`.
+`verify_provenance()` checks every stamped artifact against its recorded hash and
+flags any that has drifted — `modified` (content differs) or `missing` (no copy
+found). Curated artifacts live in the data repo and are re-hashed in place;
+derived artifacts live on the filesystem and are keyed by their experiment-relative
+path (`<CODE-NN>/…`, machine-independent) and resolved — and hash-checked — through
+the scan index. It is also exposed by the server at `/api/sdgl/provenance/verify`.
 
 > The classification and the provenance machinery are in place; `stamp()` is a
 > library call invoked from notebooks (there is no `labbook stamp` CLI yet), and

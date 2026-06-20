@@ -156,3 +156,44 @@ def test_verify_flags_missing(data_repo):
     artifact.unlink()
     result = verify_provenance(root)
     assert result[0]["status"] == "missing"
+
+
+def test_derived_keyed_portably_and_verified_via_scan_index(tmp_path):
+    """A derived artifact on an external drive is keyed by its experiment-relative
+    path (machine-independent) and verified through the scanner's recorded hash."""
+    from eln.hashing import sha256_file
+    from eln.sdgl import SDGL
+
+    root = tmp_path / "data"
+    root.mkdir()
+    # The artifact lives OUTSIDE the data repo, on a separate drive.
+    ext = tmp_path / "drive" / "SORVI-01" / "derived" / "x.npy"
+    ext.parent.mkdir(parents=True)
+    ext.write_bytes(b"output")
+
+    # Index it in the scan graph (experiment node + a hashed file location).
+    sdgl = SDGL(root)
+    sdgl.upsert_node("experiment:SORVI-01", "experiment", metadata={"code": "SORVI"})
+    st = ext.stat()
+    sdgl.upsert_location("experiment:SORVI-01", "drive", str(ext), role="file",
+                         rel_path="derived/x.npy", size=st.st_size, mtime=st.st_mtime,
+                         is_dir=0, hash_path=str(ext), metadata={"name": "x.npy"})
+
+    stamp(ext, function="f", root=root, data_commit="x", library_commit="y")
+
+    # Portable key: experiment-relative, NOT the external absolute path.
+    node = SDGL(root).get_node("dataset:SORVI-01/derived/x.npy")
+    assert node is not None
+    # Verification resolves the external file through the scan index → clean.
+    assert verify_provenance(root) == []
+
+    # A re-scan that records a different hash (file changed on disk) → modified.
+    conn = sdgl.connect()
+    conn.execute("UPDATE file_locations SET content_hash = ? "
+                 "WHERE node_id = ? AND rel_path = ?",
+                 ("sha256:deadbeef", "experiment:SORVI-01", "derived/x.npy"))
+    conn.commit()
+    conn.close()
+    result = verify_provenance(root)
+    assert result == [{"node_id": "dataset:SORVI-01/derived/x.npy",
+                       "path": "SORVI-01/derived/x.npy", "status": "modified"}]

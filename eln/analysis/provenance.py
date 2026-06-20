@@ -22,7 +22,7 @@ import sqlite3
 import warnings
 from pathlib import Path
 
-from eln.hashing import sha256_file, sha256_hex
+from eln.hashing import sha256_file
 from eln.sdgl import SDGL
 from eln.sdgl.engine import ID_FOLDER_RE, utcnow
 from eln.analysis.gitref import head_commit, remote_url, repo_root
@@ -64,6 +64,22 @@ def _infer_producer(rel_path):
     return None
 
 
+def _portable_rel(root, abs_path):
+    """A machine-independent storage key for a filesystem artifact: its path
+    relative to the enclosing ``CODE-NN`` experiment folder (``<CODE-NN>/<rest>``).
+
+    This is what makes a *derived* artifact's key portable — the same string on
+    every machine regardless of which drive the file sits on. Falls back to the
+    data-root-relative path (or absolute) when no experiment folder is in the path.
+    The real file is resolved back from this key through the scan index at verify
+    time (:func:`verify_provenance`)."""
+    parts = Path(abs_path).resolve().parts
+    for i, part in enumerate(parts):
+        if ID_FOLDER_RE.match(part):
+            return "/".join(parts[i:])
+    return _rel_to(root, abs_path)
+
+
 def stamp(
     path,
     *,
@@ -95,16 +111,23 @@ def stamp(
 
     root = _resolve_root(root)
     abs_path = Path(path).resolve()
-    rel_path = _rel_to(root, abs_path)
+    data_rel = _rel_to(root, abs_path)
     if not abs_path.exists():
         raise FileNotFoundError(f"artifact not found: {abs_path}")
 
-    producer = produced_by or _infer_producer(rel_path)
+    producer = produced_by or _infer_producer(data_rel)
     if not producer:
         raise ValueError(
             "could not infer the producing experiment from the path "
-            f"({rel_path}); pass produced_by='experiment:CODE-NN'."
+            f"({data_rel}); pass produced_by='experiment:CODE-NN'."
         )
+
+    # Storage key. Curated artifacts are copied into the data repo, so their
+    # data-root-relative path is already portable and resolvable in place. Derived
+    # artifacts stay on the filesystem, so key them by the experiment-relative path
+    # ('<CODE-NN>/<rest>') — machine-independent, resolved back to a real file via
+    # the scan index at verify time.
+    rel_path = data_rel if kind == "curated" else _portable_rel(root, abs_path)
 
     content_hash = sha256_file(abs_path)
     now = utcnow()
@@ -135,7 +158,7 @@ def stamp(
         input_hashes = {}
         for item in inputs or []:
             ip = Path(item).resolve()
-            input_hashes[_rel_to(root, ip)] = sha256_file(ip)
+            input_hashes[_portable_rel(root, ip)] = sha256_file(ip)
 
         record["library"] = {
             "repo": remote_url(_LIBRARY_REPO_DIR),
@@ -195,12 +218,37 @@ def stamp(
     return record
 
 
+def _external_hash(conn, rel_path):
+    """Current hash of an external (on-filesystem) artifact, resolved through the
+    scan index. The portable dataset key ``<EXP-ID>/<file-rel>`` maps to
+    ``file_locations`` rows under ``experiment:<EXP-ID>``. Rides on the hash the
+    scanner already recorded (so verification reflects the last scan); re-hashes
+    on disk only when the scanner left it unhashed. ``None`` when no copy exists."""
+    exp_id, _, file_rel = rel_path.partition("/")
+    if not file_rel:
+        return None
+    rows = conn.execute(
+        "SELECT path, content_hash, exists_now FROM file_locations "
+        "WHERE node_id = ? AND rel_path = ? AND is_dir = 0",
+        ("experiment:" + exp_id, file_rel),
+    ).fetchall()
+    for row in rows:
+        if row["content_hash"]:
+            return row["content_hash"]
+    for row in rows:
+        if row["exists_now"] and Path(row["path"]).exists():
+            return sha256_file(row["path"])
+    return None
+
+
 def verify_provenance(root=None):
-    """Re-hash every stamped ``dataset`` artifact; return the divergences.
+    """Check every stamped ``dataset`` artifact against its stamped fingerprint.
 
     Each entry is ``{"node_id", "path", "status"}`` where ``status`` is
-    ``"modified"`` (on-disk content differs from the stamped hash) or
-    ``"missing"`` (the file is gone). Untouched artifacts are omitted.
+    ``"modified"`` (current content differs from the stamped hash) or ``"missing"``
+    (no copy found). Untouched artifacts are omitted. Curated artifacts live in the
+    data repo and are re-hashed in place; derived artifacts live on the filesystem
+    and are resolved — and their current hash taken — through the scan index.
     """
     root = _resolve_root(root)
     sdgl = SDGL(root)
@@ -220,12 +268,14 @@ def verify_provenance(root=None):
             rel_path = meta.get("rel_path")
             if not stored or not rel_path:
                 continue  # not a stamped artifact (e.g. scanner-created node)
-            abs_path = root / rel_path
-            if not abs_path.exists():
+            in_repo = root / rel_path
+            if in_repo.exists():
+                current = sha256_file(in_repo)        # curated / in-repo
+            else:
+                current = _external_hash(conn, rel_path)  # derived / external
+            if current is None:
                 divergences.append({"node_id": row["id"], "path": rel_path, "status": "missing"})
-                continue
-            current = "sha256:" + sha256_hex(abs_path)
-            if current != stored:
+            elif current != stored:
                 divergences.append({"node_id": row["id"], "path": rel_path, "status": "modified"})
         return divergences
     finally:

@@ -340,7 +340,7 @@ the recipe isn't durably versioned and the 🔏 rendering vanishes on a fresh
 `sdgl.db` (e.g. CI). A committed, portable dump of the provenance subgraph
 (reloaded on rebuild, like `experiments.sql`) is the next step.
 
-## 🟡 7. Persist the provenance graph to git — DONE (dump+reload); path-portability remains
+## ✅ 7. Persist the provenance graph to git — DONE (dump+reload + portable paths)
 
 **Why:** after #6, curated artifact *files* are committed, but their provenance
 **graph** — `dataset` nodes + `generates`/`derived_from` edges with the recipe —
@@ -363,13 +363,16 @@ shows no artifacts).
   load restores after deleting `sdgl.db`; a scan replays committed provenance;
   empty graph removes a stale file; `stamp()` auto-dumps).
 
-**Remaining (part 3) — portable path model:** `stamp()`'s `rel_path` is relative
-to `data_root` and falls back to the **absolute path** when the artifact is
-outside the repo (the common case for *derived* data on external drives), making
-that node id machine-specific. Store a portable `(root_name, rel_path)` key (the
-scanner's model) so derived references resolve on any machine with the same scan
-roots. (Curated is already portable — #6 copies the file into the repo, so its
-`rel_path` is repo-relative. This only affects derived/by-reference stamps.)
+**Done (part 3) — portable path model:** derived artifacts are now keyed by their
+**experiment-relative path** (`<CODE-NN>/<rest>`, via `_portable_rel`), not the
+machine-specific absolute path — so the dataset key is identical on every machine
+regardless of which drive the file sits on. (Curated stays repo-relative, since #6
+copies the file into the repo.) `verify_provenance()` resolves a derived artifact
+back to a real file through the **scan index** (`file_locations` under
+`experiment:<CODE-NN>`) and rides on the **hash the scanner already recorded** —
+so verification needs no re-hash and reflects the last scan (a re-scan picks up
+drift). Same `"sha256:…"` format on both sides, so the comparison is direct.
+New test: `tests/analysis/test_provenance.py::test_derived_keyed_portably_and_verified_via_scan_index`.
 
 <details><summary>original gap analysis</summary>
 

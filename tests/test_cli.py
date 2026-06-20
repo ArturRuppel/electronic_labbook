@@ -116,7 +116,9 @@ def test_cli_stamp_derived_records_node_and_edge(monkeypatch, tmp_path, capsys):
     assert rc == 0
     assert "Stamped derived artifact" in capsys.readouterr().out
 
-    node_id = "dataset:data/SORVI-01/analysis/plot.png"
+    # Derived artifacts are keyed by the portable experiment-relative path
+    # (the data/ prefix is stripped), so the node id is machine-independent.
+    node_id = "dataset:SORVI-01/analysis/plot.png"
     conn = sqlite3.connect(str(tmp_path / "sdgl.db"))
     node = conn.execute("SELECT 1 FROM nodes WHERE id = ?", (node_id,)).fetchone()
     edge = conn.execute(
