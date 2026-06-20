@@ -405,7 +405,21 @@ filesystem copy and can verify it matches what was committed.
 
 ## Phase F — Sharing  ·  _last, per decision_
 
-### 12. Sharing via static bundles: internal (Gaia share) + selective public (GitHub Pages)  ·  M–L
+### 12. Sharing via static bundles: internal (Gaia share) + selective public (GitHub Pages)  ·  M–L  ·  _done_
+
+**Built as one destination-agnostic `labbook export`** (collapsing the two-tier
+framing): it writes a self-contained, relative-linked static HTML bundle that
+mirrors the served flat-at-root URL space, so the same artifact opens over
+`file://` from a Gaia folder or hosts on GitHub Pages. Three granularities —
+the whole catalog (`--all`), a single progress report (`--report`), or a single
+presentation (`--presentation`) — to a `--dest` folder; the authoring overlay
+adds an "Export catalog" button plus per-item Export buttons (choose-folder →
+preview/size + overwrite warning → write). The builder (`eln/share.py`) reuses
+the generators unchanged, post-processes each page to drop the three server-only
+literals (Data Graph nav link + home card, `auth.js`), and transitively copies
+**only referenced** assets (auto-dropping source/build cruft). No movie
+transcode (the corpus is already mp4); export stops at the folder (no git/Pages
+automation — a manual follow-on). The original two-tier design is below.
 **Gaia is storage-only — a mounted network drive, no compute** — so neither tier
 runs a server for viewers. Both are built on **one core: a self-contained
 static-catalog bundle builder** that assembles the generated pages + only the
@@ -568,5 +582,8 @@ of the published snapshot to a signed DigiCert TSA token committed under
 --retry`); `labbook verify` and `GET /api/timestamp/verify` verify each token
 (signature against the embedded signer cert, chained to the bundled DigiCert
 Trusted Root G4) and that the live snapshot is still anchored. With the
-compliance layer complete, **Sharing (Phase F, step 12)** — static bundles to the
-Gaia share + selective GitHub Pages — is the remaining major work.
+compliance layer complete, **Sharing (Phase F, step 12) is also done**:
+`labbook export` (and authoring-overlay buttons) writes a self-contained,
+relative-linked static HTML bundle — the whole catalog, a single report, or a
+single presentation — droppable on the Gaia share (`file://`) or hostable on
+GitHub Pages. That closes the roadmap: every numbered step (1–12) is complete.

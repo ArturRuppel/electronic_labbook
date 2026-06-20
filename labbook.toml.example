@@ -43,3 +43,13 @@ path = "data"
 # enabled = true
 # tsa_url = "http://timestamp.digicert.com"  # free, RSA-signed, no auth
 # tsa_cert = ""  # path to trusted-root PEM; empty uses the bundled DigiCert root
+
+# Sharing / export (Roadmap step 12). `labbook export` writes a self-contained,
+# relative-linked static HTML bundle you can drop on the Gaia share (open
+# index.html over file://) or host on GitHub Pages — no server needed for
+# viewers. Three granularities: the whole catalog (--all), a single progress
+# report (--report PATH), or a single presentation (--presentation DIRNAME),
+# each to a folder you pick with --dest. The authoring view (`labbook admin`)
+# also exposes an "Export catalog" button plus per-item Export buttons. Export
+# only produces the folder; putting it on Gaia or Pages is a manual follow-on.
+# No [export] config is required.
