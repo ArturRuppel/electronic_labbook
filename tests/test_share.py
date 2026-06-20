@@ -194,3 +194,31 @@ def test_generate_reports_only_one_file(data_root, tmp_path):
     html = path.read_text()
     assert "TFM progress" in html        # the selected report
     assert "Random notes" not in html    # the other report excluded
+
+
+def test_export_item_report_flat_no_nav(data_root, tmp_path):
+    from eln.share import export_item
+    dest = tmp_path / "rep"
+    result = export_item(data_root, dest, "report", "reports/weekly/tfm_progress.md")
+    index = (dest / "index.html").read_text()
+    assert "TFM progress" in index
+    assert '<div class="nav">' not in index   # standalone, nav stripped
+    assert "auth.js" not in index
+    assert result["missing"] == []
+
+
+def test_export_item_presentation_mirrored_with_redirect(data_root, tmp_path):
+    from eln.share import export_item
+    dest = tmp_path / "pres"
+    export_item(data_root, dest, "presentation", "2025-05-01_Lab_meeting")
+    redirect = (dest / "index.html").read_text()
+    assert "2025-05-01_Lab_meeting/index.html" in redirect   # meta-refresh target
+    assert (dest / "presentations" / "2025-05-01_Lab_meeting" / "index.html").is_file()
+    assert (dest / "presentations" / "2025-05-01_Lab_meeting"
+                 / "slides" / "1.png").is_file()
+
+
+def test_export_item_unknown_kind(data_root, tmp_path):
+    from eln.share import export_item
+    with pytest.raises(ValueError):
+        export_item(data_root, tmp_path / "x", "bogus", "whatever")

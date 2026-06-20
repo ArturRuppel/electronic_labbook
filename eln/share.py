@@ -14,6 +14,7 @@ import shutil
 from pathlib import Path
 
 from eln.generators import generate_all
+from eln.generators.reports import generate_reports
 
 # Refs we never copy: external, in-page, or inline data URIs.
 _EXTERNAL = re.compile(r"^(?:[a-z]+:|//|#)")
@@ -55,6 +56,12 @@ def _strip_nav(html):
 
 _HTML_SUFFIXES = {".html", ".htm"}
 
+# Top-level catalog pages. In a single-item bundle these siblings are
+# intentionally absent; their cross-links are inert and must not be flagged as
+# missing assets.
+_CATALOG_PAGES = {"index.html", "experiments.html", "protocols.html",
+                  "reports.html", "presentations.html", "admin.html", "sdgl.html"}
+
 
 def _collect_assets(start_pages, root, dest, generated):
     """Transitively copy every referenced in-tree file into ``dest``.
@@ -90,6 +97,13 @@ def _collect_assets(start_pages, root, dest, generated):
     return seen, missing, total
 
 
+def _bundle_stats(dest):
+    """Count files and total bytes actually written under ``dest`` — the true
+    size of the produced bundle (generated pages + copied assets)."""
+    files = [p for p in Path(dest).rglob("*") if p.is_file()]
+    return len(files), sum(p.stat().st_size for p in files)
+
+
 def _assert_dest_outside_root(dest, root):
     """Refuse a destination inside the data-repo tree (so an export can't land in
     reports/ and get published). Raises ValueError; otherwise returns resolved dest."""
@@ -120,5 +134,50 @@ def export_all(root, dest):
         start_pages.append(("", text))
 
     # 3. Transitively copy referenced assets.
-    _seen, missing, total = _collect_assets(start_pages, root, dest, generated)
-    return {"files": len(_seen) - len(generated), "bytes": total, "missing": missing}
+    _seen, missing, _total = _collect_assets(start_pages, root, dest, generated)
+    files, total = _bundle_stats(dest)
+    return {"files": files, "bytes": total, "missing": missing}
+
+
+_REDIRECT = ('<!doctype html><meta charset="utf-8">'
+             '<meta http-equiv="refresh" content="0; url={target}">'
+             '<title>Redirecting…</title><a href="{target}">Open</a>\n')
+
+
+def export_item(root, dest, kind, ident):
+    """Write a standalone bundle for a single ``report`` or ``presentation``.
+
+    ``ident`` is the report path relative to ``root`` (e.g.
+    ``reports/weekly/tfm_progress.md``) or the presentation directory name under
+    ``presentations/``. Returns ``{files, bytes, missing}``.
+    """
+    root = Path(root)
+    dest = _assert_dest_outside_root(dest, root)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    if kind == "report":
+        # Render just this report flat at the bundle root as index.html, nav-less.
+        path = generate_reports(root, catalog_out=dest, only=ident,
+                                output_name="index.html")
+        html = _strip_nav(_staticize(Path(path).read_text()))
+        Path(path).write_text(html)
+        _seen, missing, _total = _collect_assets([("", html)], root, dest,
+                                                 generated={"index.html"} | _CATALOG_PAGES)
+    elif kind == "presentation":
+        # Mirror the self-contained deck + a root redirect to it.
+        rel = f"presentations/{ident}/index.html"
+        src = root / rel
+        if not src.is_file():
+            raise ValueError(f"presentation not found: {rel}")
+        out = dest / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, out)
+        (dest / "index.html").write_text(_REDIRECT.format(target=rel))
+        _seen, missing, _total = _collect_assets(
+            [(f"presentations/{ident}", src.read_text(errors="ignore"))],
+            root, dest, generated={rel, "index.html"} | _CATALOG_PAGES)
+    else:
+        raise ValueError(f"unknown export kind: {kind!r}")
+
+    files, total = _bundle_stats(dest)
+    return {"files": files, "bytes": total, "missing": missing}
