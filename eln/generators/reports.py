@@ -667,8 +667,9 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
             # Auto-populate date from related experiments or file metadata
             report_date = extract_report_date(content, report_file)
 
+            rel_src = report_file.relative_to(root).as_posix()
             reports_html_list.append(f"""
-                <div class="report-card" id="report-{slug}">
+                <div class="report-card" id="report-{slug}" data-report-src="{rel_src}">
                     <div class="report-header" onclick="toggleReport('{slug}')">
                         <div class="report-title-row">
                             <span class="expand-icon" id="icon-{slug}">&#9658;</span>

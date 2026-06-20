@@ -57,7 +57,7 @@ def generate_presentations(root, catalog_out=None):
     rows = ""
     for p in presentations:
         rows += f"""
-            <tr>
+            <tr data-pres-dir="{p['dirname']}">
                 <td>{p['date']}</td>
                 <td><a href="presentations/{p['dirname']}/index.html" class="presentation-link">{p['title']}</a></td>
                 <td>{p['slide_count']}</td>

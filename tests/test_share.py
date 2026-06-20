@@ -252,3 +252,19 @@ def test_cli_export_all(data_root, tmp_path, monkeypatch):
     rc = cmd_export(args)
     assert rc == 0
     assert (dest / "index.html").is_file()
+
+
+def test_report_card_has_data_src(data_root, tmp_path):
+    from eln.generators.reports import generate_reports
+    out = tmp_path / "c"
+    generate_reports(data_root, catalog_out=out)
+    html = (out / "reports.html").read_text()
+    assert 'data-report-src="reports/weekly/tfm_progress.md"' in html
+
+
+def test_presentation_row_has_data_dir(data_root, tmp_path):
+    from eln.generators.presentations import generate_presentations
+    out = tmp_path / "c"
+    generate_presentations(data_root, catalog_out=out)
+    html = (out / "presentations.html").read_text()
+    assert 'data-pres-dir="2025-05-01_Lab_meeting"' in html
