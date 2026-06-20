@@ -20,14 +20,12 @@ from eln.generators.reports import generate_reports
 
 # Refs we never copy: external, in-page, or inline data URIs.
 _EXTERNAL = re.compile(r"^(?:[a-z]+:|//|#)")
-# Copyable references in a page. Covers double- and single-quoted ``src``/``href``
-# and reveal.js ``data-background*`` slide attributes, plus CSS ``url(...)`` in
-# inline <style>/.css. Each match yields one populated capture group; the rest empty.
-_ATTR = r"(?:src|href|data-background(?:-image|-video|-iframe|-color)?)"
-_REF = re.compile(
-    rf"""{_ATTR}\s*=\s*"([^"]+)"|{_ATTR}\s*=\s*'([^']+)'|"""
-    r"""url\(\s*['"]?([^'")]+)['"]?\s*\)"""
-)
+# Copyable double-quoted ``src``/``href`` references in a generated page. Slide
+# decks reference assets in many other ways (single quotes, data-background, CSS
+# url()), but those are never scraped — a deck is copied as a whole directory
+# (see ``_PRES_DECK``), so the generated catalog pages (plain double quotes) are
+# all this needs to handle.
+_REF = re.compile(r'(?:src|href)="([^"]+)"')
 # A reference that lands inside a self-contained presentation deck directory.
 _PRES_DECK = re.compile(r"^(presentations/[^/]+)/")
 # The server-only ``auth.js`` script a generated page carries (stripped on export).
@@ -39,9 +37,8 @@ def _local_refs(html):
     """Return in-order local (copyable) ``src``/``href`` targets, query/fragment
     stripped. External (`http:`, `//`, `mailto:`, `#`, `data:`) refs are dropped."""
     out = []
-    for groups in _REF.findall(html):
-        raw = next((g for g in groups if g), "")
-        if not raw or _EXTERNAL.match(raw):
+    for raw in _REF.findall(html):
+        if _EXTERNAL.match(raw):
             continue
         ref = raw.split("#", 1)[0].split("?", 1)[0]
         if ref:

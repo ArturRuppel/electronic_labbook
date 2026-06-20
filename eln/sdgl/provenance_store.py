@@ -19,13 +19,6 @@ from pathlib import Path
 
 PROVENANCE_FILE = "provenance.json"
 
-# The graph this store owns. ``dataset`` nodes and these two relations are the
-# only graph content created by stamping (never by scanning), so they round-trip
-# cleanly without colliding with the scanner.
-_NODE_TYPES = ("dataset",)
-_EDGE_RELATIONS = ("generates", "derived_from")
-
-
 def _meta(value):
     return json.loads(value) if value else None
 
@@ -33,19 +26,21 @@ def _meta(value):
 def dump_provenance(sdgl):
     """Write the provenance subgraph of ``sdgl`` to ``<root>/provenance.json``.
 
+    ``dataset`` nodes and ``generates`` / ``derived_from`` edges are the only graph
+    content created by stamping (never by scanning), so they round-trip cleanly.
     Deterministic (sorted, indented) so commits diff cleanly. Returns the path.
     When the subgraph is empty, any stale file is removed rather than left behind.
     """
     path = Path(sdgl.root_path) / PROVENANCE_FILE
     conn = sdgl.connect()
     try:
-        node_q = "SELECT id, type, title, description, experiment_id, metadata FROM nodes WHERE type IN ({})".format(
-            ",".join("?" * len(_NODE_TYPES)))
-        edge_q = "SELECT source_id, target_id, relation_type, metadata FROM edges WHERE relation_type IN ({})".format(
-            ",".join("?" * len(_EDGE_RELATIONS)))
         try:
-            node_rows = conn.execute(node_q, _NODE_TYPES).fetchall()
-            edge_rows = conn.execute(edge_q, _EDGE_RELATIONS).fetchall()
+            node_rows = conn.execute(
+                "SELECT id, type, title, description, experiment_id, metadata "
+                "FROM nodes WHERE type = 'dataset'").fetchall()
+            edge_rows = conn.execute(
+                "SELECT source_id, target_id, relation_type, metadata FROM edges "
+                "WHERE relation_type IN ('generates', 'derived_from')").fetchall()
         except sqlite3.OperationalError:
             node_rows, edge_rows = [], []  # graph schema not created yet
     finally:

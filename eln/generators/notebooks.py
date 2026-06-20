@@ -84,17 +84,20 @@ def known_codes(db_path):
         conn.close()
 
 
-def notebook_artifacts(root, notebook_rel):
-    """List artifacts a notebook produced, from SDGL ``generates`` edges.
+def artifacts_by_notebook(root):
+    """Map every notebook to the artifacts it produced, from SDGL ``generates``
+    edges. Keyed by the producing notebook's path; each value is a sorted list of
+    ``{"path", "status"}`` (``status`` in ``ok`` / ``modified`` / ``missing``).
 
-    Each item is ``{"path", "status"}`` with ``status`` in ``ok`` / ``modified``
-    / ``missing``. Returns ``[]`` when ``sdgl.db`` is absent or has no edges, so
-    the page renders fully without SDGL.
+    Built in one pass — a single ``generates`` query and a single
+    ``verify_provenance`` over the whole graph — so rendering the notebooks page
+    does that work once rather than once per notebook. Empty when ``sdgl.db`` is
+    absent or has no edges, so the page renders fully without SDGL.
     """
     root = Path(root)
     sdgl_db = root / DEFAULT_SDGL_DB_NAME
     if not sdgl_db.exists():
-        return []
+        return {}
 
     from eln.analysis.provenance import verify_provenance
     from eln.sdgl.engine import json_loads
@@ -107,20 +110,29 @@ def notebook_artifacts(root, notebook_rel):
                 "SELECT target_id, metadata FROM edges WHERE relation_type = 'generates'"
             ).fetchall()
         except sqlite3.OperationalError:
-            return []
+            return {}
     finally:
         conn.close()
 
     status_by_node = {d["node_id"]: d["status"] for d in verify_provenance(root)}
-    artifacts = []
+    by_notebook = {}
     for row in rows:
         meta = json_loads(row["metadata"]) or {}
-        notebook = meta.get("notebook") or {}
-        if notebook.get("path") == notebook_rel:
-            node = row["target_id"]
-            path = node[len("dataset:"):] if node.startswith("dataset:") else node
-            artifacts.append({"path": path, "status": status_by_node.get(node, "ok")})
-    return sorted(artifacts, key=lambda a: a["path"])
+        nb_path = (meta.get("notebook") or {}).get("path")
+        if not nb_path:
+            continue
+        node = row["target_id"]
+        path = node[len("dataset:"):] if node.startswith("dataset:") else node
+        by_notebook.setdefault(nb_path, []).append(
+            {"path": path, "status": status_by_node.get(node, "ok")})
+    for items in by_notebook.values():
+        items.sort(key=lambda a: a["path"])
+    return by_notebook
+
+
+def notebook_artifacts(root, notebook_rel):
+    """Artifacts a single notebook produced (see :func:`artifacts_by_notebook`)."""
+    return artifacts_by_notebook(root).get(notebook_rel, [])
 
 
 NOTEBOOKS_HTML_TEMPLATE = """<!DOCTYPE html>
@@ -271,6 +283,7 @@ def generate_notebooks(root, catalog_out=None, plugins=None):
     catalog_dir = Path(catalog_out) if catalog_out else root / "catalog"
 
     codes = known_codes(database_path)
+    artifacts = artifacts_by_notebook(root)  # one verify pass for the whole page
     entries = []
     if notebooks_dir.is_dir():
         for path in sorted(notebooks_dir.glob("*.ipynb")):
@@ -284,7 +297,7 @@ def generate_notebooks(root, catalog_out=None, plugins=None):
             entry["matched"] = bool(info["code"]) and info["code"] in codes
             entry["cells_html"] = cells_html
             entry["outputs"] = output_cells
-            entry["artifacts"] = notebook_artifacts(root, f"notebooks/{path.name}")
+            entry["artifacts"] = artifacts.get(f"notebooks/{path.name}", [])
             entries.append(entry)
 
     if entries:
