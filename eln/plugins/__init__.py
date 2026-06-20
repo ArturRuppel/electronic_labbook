@@ -1,4 +1,4 @@
-"""Plugin system (Roadmap step 9) — the OSS plugin template.
+"""Plugin system — the OSS plugin template.
 
 A plugin extends the notebook through four clean extension points, each an
 optional field on :class:`Plugin`:

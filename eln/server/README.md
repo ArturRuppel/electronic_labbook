@@ -1,7 +1,5 @@
 # `eln.server` — Flask API + overlay/admin + publish
 
-**Roadmap step 6.** Ported from the original `api_server.py` + `catalog/` overlay.
-
 `create_app(root)` builds the local Flask app bound to a **data-repo root** (the
 same root the generators and SDGL use). Run it with the unified CLI:
 
@@ -36,7 +34,7 @@ The server is **local-only and unauthenticated by design**.
    materializes CODE-NN identifiers, dumps `experiments.sql` via `eln.db.dump`,
    then `git add experiments.sql reports/ presentations/ thumbnails/` + commit +
    push — the binary `experiments.db` is **never** committed. The static
-   `catalog/` is not committed either; GitLab CI rebuilds it (ROADMAP step 7).
+   `catalog/` is not committed either; GitLab CI rebuilds it.
 
 ## Modules
 

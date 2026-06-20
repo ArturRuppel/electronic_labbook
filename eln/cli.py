@@ -163,7 +163,7 @@ def cmd_publish(args):
 
 def cmd_backup(args):
     """Launch the local server and open the explorer, where data can be selected
-    and backed up (Roadmap step 8). Reuses the admin server (local, unauthenticated)."""
+    and backed up. Reuses the admin server (local, unauthenticated)."""
     from eln.server import create_app
 
     config = _load(args)
@@ -187,7 +187,7 @@ def cmd_backup(args):
 
 
 def cmd_export(args):
-    """Write a self-contained static HTML bundle (Roadmap step 12): the whole
+    """Write a self-contained static HTML bundle: the whole
     catalog, a single report, or a single presentation, to --dest."""
     from eln.share import export_all, export_item
 

@@ -1,8 +1,8 @@
 # `eln.db` — schema + diffable DB plumbing
 
-**Roadmap step 2.** This package owns the database as a *build artifact*.
+This package owns the database as a *build artifact*.
 
-Lands here:
+Contents:
 
 - **Schema / migrations** as the source of truth for `experiments.db`.
 - **`dump_db.py`** — deterministic dump to `experiments.sql`
@@ -12,5 +12,3 @@ Lands here:
 
 The binary `*.db` is never committed (see `.gitignore`); `experiments.sql` is the
 versioned form and lives in the **data** repo.
-
-See `docs/ROADMAP.md` and `plans/plan-G-db-versioning.md` (ported in step 2).

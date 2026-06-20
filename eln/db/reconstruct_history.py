@@ -13,7 +13,7 @@ Commits whose binary produced an SQL dump identical to the previous one (e.g. a
 vacuum or a timestamp-only change) are skipped, so the reconstructed history
 records only semantic changes.
 
-Run once during Roadmap Phase A, step 3. Example:
+Run once during the migration to the diffable history. Example:
 
     python -m eln.db.reconstruct_history \
         --source-repo /home/aruppel/Data/electronic_labbook \

@@ -4,10 +4,8 @@ A small, **synthetic** dataset (no real research data, no PII) so the applicatio
 **runs out of the box** for anyone who clones the public repo:
 
 - a handful of fake experiments following the SDGL naming grammar
-  (`AA00_raw`, `AA00_analysis_tfm`, …),
+  (`SORVI-01`, `SORVI-02`, `COV2D-X03`, …),
 - one or two example reports and protocols,
 - a `labbook.toml` pointing the scan roots at this folder.
 
-This is what a new contributor sees before they wire up their own data repo. It is
-populated as the engine and generators land (Roadmap steps 4–5); for now this is a
-placeholder describing the intent.
+This is what someone sees before they wire up their own data repo.

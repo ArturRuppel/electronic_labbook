@@ -1,6 +1,6 @@
 # `eln.generators` — static page generators
 
-**Roadmap step 5** (includes Plan F). Ported from the original `scripts/generate_*.py`.
+Ported from the original `scripts/generate_*.py`.
 
 Every generator reads from a data-repo *root* (holding `experiments.db`, the
 optional `sdgl.db` build artifact, `reports/` and `presentations/`) and writes a

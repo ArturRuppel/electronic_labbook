@@ -1,4 +1,4 @@
-"""Static-bundle export (Roadmap step 12).
+"""Static-bundle export.
 
 Turns the rendered catalog into a self-contained, relative-linked static HTML
 bundle openable via ``file://`` or hostable on GitHub Pages. Three granularities:

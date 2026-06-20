@@ -4,7 +4,7 @@ Unlike the original monorepo (which committed the binary ``data/experiments.db``
 the clean-rebuild publish materializes the database into its diffable form —
 ``experiments.sql`` via :func:`eln.db.dump` — and commits *that* to the **data**
 repo, then pushes. The static ``catalog/`` is intentionally not committed: GitLab
-CI rebuilds it from ``experiments.sql`` on every Pages build (see ROADMAP step 7).
+CI rebuilds it from ``experiments.sql`` on every Pages build.
 """
 
 import subprocess
@@ -74,8 +74,8 @@ def publish(root, eln_db_path=None, *, push=True, remote="origin", branch="main"
     # 2. Dump the database to its diffable form inside the data repo.
     dump(db_path, root / "experiments.sql")
 
-    # 2b. Best-effort trusted timestamp over the snapshot (Roadmap step 11,
-    #     layer 3). A TSA failure records a "pending" entry but never blocks the
+    # 2b. Best-effort trusted timestamp over the snapshot (RFC 3161 layer).
+    #     A TSA failure records a "pending" entry but never blocks the
     #     publish; the token/manifest/index land under timestamps/ (in
     #     PUBLISH_PATHS) and are committed with the rest below.
     if timestamp_cfg and timestamp_cfg.get("enabled", True):

@@ -1,8 +1,8 @@
 # `eln.sdgl` — Scientific Data Graph Layer
 
-**Roadmap step 4.** The scan engine and the project's differentiator.
+The scan engine and the project's differentiator.
 
-Lands here (ported from the original `sdgl.py`):
+Contents:
 
 - Scan of configured roots from the unified `labbook.toml`.
 - The naming grammar: folders named exactly `CODE-NN` where the 5-character
@@ -14,6 +14,5 @@ Lands here (ported from the original `sdgl.py`):
 - Materialized `experiment_metadata.start_date` (earliest raw-file mtime) so dates
   ride inside `experiments.sql` and the generators never need `sdgl.db`.
 
-**Port as acceptance criteria** (already debugged upstream): hidden-folder
-exclusion, raw-only date derivation, per-repetition qualifier display. See the
-port inventory in `docs/ROADMAP.md`.
+Behaviors worth noting: hidden-folder exclusion, raw-only date derivation, and
+per-repetition qualifier display.

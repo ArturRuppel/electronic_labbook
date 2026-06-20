@@ -13,4 +13,4 @@ The **generated** pages (`index.html`, `experiments.html`, `protocols.html`,
 **gitignored** (`catalog/*.html`). On deploy they are built fresh and served via
 GitLab Pages from the **data** repo.
 
-Assets are ported in Roadmap step 6 (server + overlay/admin).
+Assets are ported from the original server + overlay/admin.

@@ -1,10 +1,8 @@
-"""RFC 3161 trusted timestamps (Roadmap step 11, compliance layer 3).
+"""RFC 3161 trusted timestamps (compliance layer 3).
 
 Anchors a publish to a signed proof-of-existence-at-a-time over a content
 manifest digest of the published snapshot. Self-contained: verification needs
 only the token, the recomputed digest, and the TSA cert -- not git or GitHub.
-
-See ``docs/superpowers/specs/2026-06-20-rfc3161-timestamps-design.md``.
 """
 
 from __future__ import annotations

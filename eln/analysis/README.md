@@ -77,7 +77,6 @@ read-only at `GET /api/sdgl/provenance/verify`.
 
 ## Notes
 
-- Content hashing is an inline `sha256` (`eln.hashing.sha256_file`) until the
-  scan-integrated content hashing of Roadmap step 11 lands; the helper swaps in
-  cleanly.
+- Content hashing is an inline `sha256` (`eln.hashing.sha256_file`); it can swap
+  cleanly to the scan-integrated content hashing when that path is preferred.
 - Stamping is an explicit call from a notebook — the scanner does not auto-stamp.

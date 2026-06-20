@@ -1,4 +1,4 @@
-"""Presentations — the first plugin (Roadmap step 9).
+"""Presentations — the first plugin.
 
 Re-expresses presentations entirely through the plugin extension points: a nav
 entry, a static-page generator, a static mount for the slide assets, and a

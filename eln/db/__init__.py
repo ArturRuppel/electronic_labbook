@@ -6,8 +6,7 @@
 - ``rebuild_db``      experiments.sql -> experiments.db (idempotent).
 
 The binary database is a build artifact and is never committed; ``experiments.sql``
-is the versioned form. See ``docs/ROADMAP.md`` step 2 and
-``plans/plan-G-db-versioning.md``.
+is the versioned form.
 """
 
 from pathlib import Path

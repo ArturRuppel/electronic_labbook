@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scientific Data Graph Layer: storage, migration, and scanner.
 
-Ported from the original in-place ``sdgl.py`` (Roadmap step 4). Two changes from
+Ported from the original in-place ``sdgl.py``. Two changes from
 the original:
 
 1. The ELN database defaults to ``<root>/experiments.db`` (the data-repo layout),
@@ -397,7 +397,7 @@ class SDGL:
             """
         )
         # Self-heal older sdgl.db files that predate the scan-by-ID and
-        # content-hashing columns (Roadmap step 11, layer 1).
+        # content-hashing columns (layer 1).
         existing_cols = {row[1] for row in cursor.execute("PRAGMA table_info(file_locations)")}
         for column, decl in (
             ("rel_path", "TEXT"),
@@ -741,7 +741,7 @@ class SDGL:
                         metadata=None, conn=None, hash_path=None,
                         hash_max_bytes=None):
         """Record a file sighting. When ``hash_path`` is given and the entry is a
-        file, a SHA-256 content hash is stored (Roadmap step 11, layer 1). The
+        file, a SHA-256 content hash is stored (layer 1). The
         hash is recomputed only when the file is new or its size/mtime changed
         since it was last hashed, so re-scans of an unchanged corpus do no I/O.
         When ``hash_path`` is ``None`` any previously stored hash is preserved."""
@@ -872,8 +872,8 @@ class SDGL:
         Args:
             roots: List of scan root configurations.
             list_paths: If True, return recognized paths in the summary.
-            content_hash: If True, store/refresh a SHA-256 per file (Roadmap
-                step 11, layer 1). Recomputed only when size/mtime drift.
+            content_hash: If True, store/refresh a SHA-256 per file
+                (layer 1). Recomputed only when size/mtime drift.
             hash_max_bytes: Optional ceiling; files larger than this are left
                 unhashed (keeps a first pass over huge raw corpora bounded).
         """
@@ -1108,7 +1108,7 @@ class SDGL:
 
     def verify_hashes(self, node_id=None):
         """Recompute the SHA-256 of every hashed file location and compare it to
-        the stored hash — the tamper-evidence half of Roadmap step 11, layer 1.
+        the stored hash — the tamper-evidence half of content hashing (layer 1).
 
         Returns ``{"checked", "ok", "mismatch": [...], "missing": [...]}``. A
         *mismatch* means a file's contents diverged from the witnessed hash

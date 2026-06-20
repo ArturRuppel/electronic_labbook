@@ -1,7 +1,6 @@
 """Scientific Data Graph Layer (SDGL) — the project's differentiator.
 
-Public API re-exported from :mod:`eln.sdgl.engine`. See ``docs/ROADMAP.md`` step 4
-and the SDGL design spec.
+Public API re-exported from :mod:`eln.sdgl.engine`.
 """
 
 from .engine import (

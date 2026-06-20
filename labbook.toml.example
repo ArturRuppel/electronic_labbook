@@ -7,7 +7,7 @@ data_root = "/abs/path/to/data-repo"
 [scanner]
 run_on_startup = false
 daily_scan = false
-# Content hashing (Roadmap step 11): store a SHA-256 per file on scan for
+# Content hashing: store a SHA-256 per file on scan for
 # tamper-evidence and duplicate detection. Opt-in, because the first pass over a
 # large raw corpus can be slow; afterwards a file is only re-hashed when its
 # size or mtime changes. `labbook scan --hash` forces it on for one run, and
@@ -32,7 +32,7 @@ path = "data"
 #     ["RFP", "561", "mCherry"],
 # ]
 
-# RFC 3161 trusted timestamps (Roadmap step 11, layer 3). On `labbook publish`,
+# RFC 3161 trusted timestamps (layer 3). On `labbook publish`,
 # a SHA-256 digest of the published snapshot is anchored to a signed token from
 # a Time Stamping Authority and committed under timestamps/ — cryptographic
 # proof-of-existence-at-a-time that even git can't provide. Best-effort: a TSA
@@ -44,7 +44,7 @@ path = "data"
 # tsa_url = "http://timestamp.digicert.com"  # free, RSA-signed, no auth
 # tsa_cert = ""  # path to trusted-root PEM; empty uses the bundled DigiCert root
 
-# Sharing / export (Roadmap step 12). `labbook export` writes a self-contained,
+# Sharing / export. `labbook export` writes a self-contained,
 # relative-linked static HTML bundle you can drop on the Gaia share (open
 # index.html over file://) or host on GitHub Pages — no server needed for
 # viewers. Three granularities: the whole catalog (--all), a single progress

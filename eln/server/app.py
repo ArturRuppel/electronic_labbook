@@ -76,7 +76,7 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     ``channel_aliases`` is the list of channel equivalence groups (also from the
     config); it drives fungible-marker collapsing in the field-values endpoint.
     ``scanner`` is the ``[scanner]`` config table; it supplies the content-hashing
-    settings used by the scan route and background scan (Roadmap step 11).
+    settings used by the scan route and background scan.
     """
     root = Path(root)
     database_path = Path(eln_db_path) if eln_db_path else root / "experiments.db"
@@ -300,7 +300,7 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     @app.route("/api/timestamp/verify", methods=["GET"])
     def timestamp_verify():
         """Verify recorded RFC 3161 tokens and whether the live snapshot is
-        anchored (Roadmap step 11, layer 3)."""
+        anchored (layer 3)."""
         from eln import timestamp as ts_mod
         cfg = ts_mod.resolve_timestamp_config(app.config.get("TIMESTAMP"))
         return jsonify(ts_mod.verify_all(root, cfg))

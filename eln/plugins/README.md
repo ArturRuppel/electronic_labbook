@@ -1,6 +1,6 @@
 # `eln.plugins` — plugin API + extension points
 
-**Roadmap step 9.** Defines the plugin boundary correctly the first time (rather
+Defines the plugin boundary correctly the first time (rather
 than coupling features in and extracting them later). **Presentations** is the
 first plugin built against this API and the template for future ones.
 
@@ -57,5 +57,4 @@ slides = "my_eln_slides:plugin"
 ```
 
 `pip install` the package and `labbook regenerate` / the server pick it up
-automatically. See `eln/plugins/presentations.py` for the reference plugin and
-`docs/superpowers/plans/2026-06-19-presentations-plugin.md` for the design.
+automatically. See `eln/plugins/presentations.py` for the reference plugin.

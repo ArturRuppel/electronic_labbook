@@ -1,4 +1,4 @@
-"""Static page generators (Roadmap step 5, includes Plan F).
+"""Static page generators.
 
 Each generator reads from a data-repo *root* (holding ``experiments.db``, the
 optional ``sdgl.db`` build artifact, ``reports/`` and ``presentations/``) and

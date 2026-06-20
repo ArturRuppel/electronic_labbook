@@ -1,4 +1,4 @@
-"""SDGL content hashing on scan (Roadmap step 11, layer 1): SHA-256 per file,
+"""SDGL content hashing on scan (layer 1): SHA-256 per file,
 incremental re-hashing, hash preservation, and tamper-evidence verification."""
 
 import hashlib

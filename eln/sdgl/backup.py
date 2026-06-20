@@ -1,4 +1,4 @@
-"""Selectable data backup (Roadmap step 8).
+"""Selectable data backup.
 
 Copies the identified raw+derived files tracked in SDGL's ``file_locations`` to a
 user-chosen destination, organized by experiment CODE. Duplicate sightings of one

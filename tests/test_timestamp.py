@@ -1,4 +1,4 @@
-"""RFC 3161 trusted timestamps (Roadmap step 11, layer 3).
+"""RFC 3161 trusted timestamps (layer 3).
 
 Manifest digest, index I/O, TSA request/verify wrappers (rfc3161ng mocked),
 create/retry orchestration (our request seam mocked), and the verify summary.

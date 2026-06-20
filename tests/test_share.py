@@ -1,4 +1,4 @@
-"""Static-bundle export (Roadmap step 12): helpers, full/single export, CLI."""
+"""Static-bundle export: helpers, full/single export, CLI."""
 
 import os
 import sqlite3

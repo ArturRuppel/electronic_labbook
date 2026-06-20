@@ -1,4 +1,4 @@
-"""Reusable analysis library + provenance (Roadmap step 10b).
+"""Reusable analysis library + provenance.
 
 Importable from experiment notebooks. The governing rule: **if it produces an
 artifact, it gets committed** — the code that makes a derived file lives in git
