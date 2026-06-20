@@ -90,6 +90,36 @@ def test_no_data_root_raises(tmp_path):
         load_config(cfg)
 
 
+def test_timestamp_config_defaults_and_override(tmp_path, monkeypatch):
+    data = tmp_path / "data-repo"
+    data.mkdir()
+    cfg = _write_config(
+        tmp_path, data,
+        extra='\n[timestamp]\nenabled = false\ntsa_url = "https://t.example/tsr"\n',
+    )
+    monkeypatch.delenv("ELN_ROOT", raising=False)
+    c = load_config(cfg)
+    assert c.timestamp["enabled"] is False
+    assert c.timestamp["tsa_url"] == "https://t.example/tsr"
+
+
+def test_timestamp_config_absent_is_empty(tmp_path, monkeypatch):
+    data = tmp_path / "data-repo"
+    data.mkdir()
+    cfg = _write_config(tmp_path, data)
+    monkeypatch.delenv("ELN_ROOT", raising=False)
+    assert load_config(cfg).timestamp == {}
+
+
+def test_resolve_timestamp_config_fills_defaults():
+    from eln.timestamp import resolve_timestamp_config, DEFAULT_TSA_URL
+    cfg = resolve_timestamp_config({})
+    assert cfg["enabled"] is True
+    assert cfg["tsa_url"] == DEFAULT_TSA_URL
+    assert isinstance(cfg["cert_bytes"], bytes) and cfg["cert_bytes"]
+    assert "experiments.sql" in cfg["paths"]
+
+
 def test_find_config_path_uses_env_override(tmp_path, monkeypatch):
     target = tmp_path / "custom.toml"
     monkeypatch.setenv("LABBOOK_CONFIG", str(target))

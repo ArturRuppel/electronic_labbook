@@ -31,6 +31,7 @@ class Config:
     scanner: dict = field(default_factory=dict)
     scan_roots: list = field(default_factory=list)  # [{"name": str, "path": Path}]
     channel_aliases: list = field(default_factory=list)  # [[canonical, variant, ...]]
+    timestamp: dict = field(default_factory=dict)  # [timestamp] table (RFC 3161)
 
 
 def find_config_path() -> Path:
@@ -90,4 +91,5 @@ def load_config(config_path=None, *, root_override=None) -> Config:
         scanner=data.get("scanner", {}),
         scan_roots=scan_roots,
         channel_aliases=channel_aliases,
+        timestamp=data.get("timestamp", {}),
     )
