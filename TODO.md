@@ -1,5 +1,19 @@
 # TODO
 
+## ✅ 1. Exported presentations render black (all slides missing) — DONE
+
+**Fixed** (`eln/share.py`): presentation decks are now copied **wholesale**. A
+reference that lands inside `presentations/<name>/` pulls the entire deck
+directory in one shot (`_copy_tree`, `_PRES_DECK`), so every slide reaches the
+bundle regardless of how it's referenced. `export_item`'s presentation branch
+copies the whole deck dir directly. Secondary hardening: `_REF` now also matches
+single-quoted attrs, reveal.js `data-background*`, and CSS `url(...)`. Tests in
+`tests/test_share.py` exercise data-background, single-quote, and unreferenced
+assets. (CDN-loaded reveal.js/CSS under `file://` is still untested — revisit
+with a real deck.)
+
+<details><summary>original analysis</summary>
+
 ## 1. Exported presentations render black (all slides missing)
 
 **Symptom:** in a static bundle produced by `export_all` / `export_item`, every
@@ -42,6 +56,8 @@ catch `data-background*`, single-quoted attrs, and CSS `url(...)`.
 Also note: if decks load reveal.js/CSS from a CDN (`http(s)://`), those are
 dropped as external (`_EXTERNAL`, `eln/share.py:20`) and won't load under
 `file://` offline — worth confirming once a real deck is available.
+
+</details>
 
 ## 2. Homepage retired in favor of SDGL page, but SDGL page is absent from export
 

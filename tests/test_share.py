@@ -55,9 +55,19 @@ def data_root(tmp_path, monkeypatch):
 
     pres = root / "presentations" / "2025-05-01_Lab_meeting"
     pres.mkdir(parents=True)
-    (pres / "index.html").write_text('<html><img src="slides/1.png"></html>')
+    # A realistic deck: slide 1 via plain <img>, slide 2 via reveal.js
+    # data-background-image, slide 3 via a single-quoted <img>, plus a handout
+    # referenced by nothing — all must reach the bundle (whole deck copied).
+    (pres / "index.html").write_text(
+        '<html><img src="slides/1.png">'
+        '<section data-background-image="slides/2.png"></section>'
+        "<img src='slides/3.png'></html>"
+    )
     (pres / "slides").mkdir()
     (pres / "slides" / "1.png").write_bytes(b"x")
+    (pres / "slides" / "2.png").write_bytes(b"x")
+    (pres / "slides" / "3.png").write_bytes(b"x")
+    (pres / "handout.pdf").write_bytes(b"PDF")
 
     cfg = root / "labbook.toml"
     cfg.write_text(
@@ -124,19 +134,23 @@ def test_strip_nav_removes_whole_nav_block():
     assert "before" in out and "after" in out
 
 
-def test_collect_assets_transitive_and_skips(tmp_path):
+def test_collect_assets_copies_whole_deck(tmp_path):
     root = tmp_path / "root"
     dest = tmp_path / "dest"
-    # A presentation page links to a nested self-contained presentation html,
-    # which in turn links a slide and a movie; a build script must NOT be copied.
-    (root / "presentations" / "P").mkdir(parents=True)
-    (root / "presentations" / "P" / "index.html").write_text(
-        '<img src="slides/1.png"><source src="movie.mp4">'
+    # A catalog page links to a presentation deck. Decks are copied wholesale, so
+    # every file in the deck dir reaches the bundle — including a slide referenced
+    # only via reveal.js data-background and a file referenced by nothing at all.
+    deck = root / "presentations" / "P"
+    deck.mkdir(parents=True)
+    (deck / "index.html").write_text(
+        '<img src="slides/1.png">'
+        '<section data-background-image="slides/2.png"></section>'
     )
-    (root / "presentations" / "P" / "slides").mkdir()
-    (root / "presentations" / "P" / "slides" / "1.png").write_bytes(b"PNG")
-    (root / "presentations" / "P" / "movie.mp4").write_bytes(b"MP4DATA")
-    (root / "presentations" / "P" / "build.sh").write_text("echo unused")
+    (deck / "slides").mkdir()
+    (deck / "slides" / "1.png").write_bytes(b"PNG1")
+    (deck / "slides" / "2.png").write_bytes(b"PNG2")     # data-background only
+    (deck / "movie.mp4").write_bytes(b"MP4DATA")          # referenced by nothing
+    (deck / "build.sh").write_text("echo unused")         # referenced by nothing
     dest.mkdir()
 
     start = [("", '<a href="presentations/P/index.html">P</a>'
@@ -146,12 +160,14 @@ def test_collect_assets_transitive_and_skips(tmp_path):
 
     seen, missing, total = _collect_assets(start, root, dest, generated={"experiments.html"})
 
-    assert (dest / "presentations" / "P" / "index.html").is_file()
-    assert (dest / "presentations" / "P" / "slides" / "1.png").read_bytes() == b"PNG"
-    assert (dest / "presentations" / "P" / "movie.mp4").is_file()
-    assert not (dest / "presentations" / "P" / "build.sh").exists()  # unreferenced
-    index_text = '<img src="slides/1.png"><source src="movie.mp4">'
-    assert total == len(b"PNG") + len(b"MP4DATA") + len(index_text)
+    pdest = dest / "presentations" / "P"
+    assert (pdest / "index.html").is_file()
+    assert (pdest / "slides" / "1.png").read_bytes() == b"PNG1"
+    assert (pdest / "slides" / "2.png").read_bytes() == b"PNG2"   # data-background slide
+    assert (pdest / "movie.mp4").is_file()
+    assert (pdest / "build.sh").is_file()                          # whole deck copied
+    deck_bytes = sum(p.stat().st_size for p in deck.rglob("*") if p.is_file())
+    assert total == deck_bytes
     assert missing == []
 
 
@@ -176,8 +192,10 @@ def test_export_all_layout_and_staticized(data_root, tmp_path):
     nav_page = (dest / "experiments.html").read_text()
     assert ">Data Graph<" not in nav_page          # server-only link dropped
     assert ">Experiments<" in nav_page             # nav otherwise intact
-    assert (dest / "presentations" / "2025-05-01_Lab_meeting"
-                 / "slides" / "1.png").is_file()
+    deck = dest / "presentations" / "2025-05-01_Lab_meeting"
+    assert (deck / "slides" / "1.png").is_file()
+    assert (deck / "slides" / "2.png").is_file()   # data-background slide reaches bundle
+    assert (deck / "handout.pdf").is_file()         # whole deck copied
     assert result["files"] >= 1 and result["bytes"] >= 1
 
 
@@ -217,9 +235,11 @@ def test_export_item_presentation_mirrored_with_redirect(data_root, tmp_path):
     export_item(data_root, dest, "presentation", "2025-05-01_Lab_meeting")
     redirect = (dest / "index.html").read_text()
     assert "2025-05-01_Lab_meeting/index.html" in redirect   # meta-refresh target
-    assert (dest / "presentations" / "2025-05-01_Lab_meeting" / "index.html").is_file()
-    assert (dest / "presentations" / "2025-05-01_Lab_meeting"
-                 / "slides" / "1.png").is_file()
+    deck = dest / "presentations" / "2025-05-01_Lab_meeting"
+    assert (deck / "index.html").is_file()
+    assert (deck / "slides" / "1.png").is_file()
+    assert (deck / "slides" / "3.png").is_file()   # single-quoted <img> slide
+    assert (deck / "handout.pdf").is_file()         # unreferenced asset, copied anyway
 
 
 def test_export_item_unknown_kind(data_root, tmp_path):

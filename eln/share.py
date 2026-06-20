@@ -18,7 +18,16 @@ from eln.generators.reports import generate_reports
 
 # Refs we never copy: external, in-page, or inline data URIs.
 _EXTERNAL = re.compile(r"^(?:[a-z]+:|//|#)")
-_REF = re.compile(r'(?:src|href)="([^"]+)"')
+# Copyable references in a page. Covers double- and single-quoted ``src``/``href``
+# and reveal.js ``data-background*`` slide attributes, plus CSS ``url(...)`` in
+# inline <style>/.css. Each match yields one populated capture group; the rest empty.
+_ATTR = r"(?:src|href|data-background(?:-image|-video|-iframe|-color)?)"
+_REF = re.compile(
+    rf"""{_ATTR}\s*=\s*"([^"]+)"|{_ATTR}\s*=\s*'([^']+)'|"""
+    r"""url\(\s*['"]?([^'")]+)['"]?\s*\)"""
+)
+# A reference that lands inside a self-contained presentation deck directory.
+_PRES_DECK = re.compile(r"^(presentations/[^/]+)/")
 # The three fixed, known server-only literals a generated page carries.
 _AUTH_JS = re.compile(r'[ \t]*<script src="auth\.js"></script>\n?')
 _NAV_GRAPH_LINK = re.compile(r'[ \t]*<a href="/">Data Graph</a>\n?')
@@ -30,8 +39,9 @@ def _local_refs(html):
     """Return in-order local (copyable) ``src``/``href`` targets, query/fragment
     stripped. External (`http:`, `//`, `mailto:`, `#`, `data:`) refs are dropped."""
     out = []
-    for raw in _REF.findall(html):
-        if _EXTERNAL.match(raw):
+    for groups in _REF.findall(html):
+        raw = next((g for g in groups if g), "")
+        if not raw or _EXTERNAL.match(raw):
             continue
         ref = raw.split("#", 1)[0].split("?", 1)[0]
         if ref:
@@ -52,6 +62,24 @@ def _strip_nav(html):
     """Remove the entire ``<div class="nav">…</div>`` block (single-item exports
     are standalone, with no catalog nav)."""
     return _NAV_BLOCK.sub("", html)
+
+
+def _copy_tree(src_dir, dest_dir):
+    """Copy an entire directory tree verbatim, returning ``(relpaths, bytes)`` of
+    the files written. Used for self-contained presentation decks, where reference
+    scraping misses assets (CSS ``url()``, reveal.js ``data-background``, etc.)."""
+    src_dir, dest_dir = Path(src_dir), Path(dest_dir)
+    rels, total = [], 0
+    for src in sorted(src_dir.rglob("*")):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(src_dir)
+        out = dest_dir / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, out)
+        rels.append(str(rel).replace(os.sep, "/"))
+        total += src.stat().st_size
+    return rels, total
 
 
 _HTML_SUFFIXES = {".html", ".htm"}
@@ -75,6 +103,7 @@ def _collect_assets(start_pages, root, dest, generated):
     """
     root, dest = Path(root), Path(dest)
     seen = set(generated)
+    decks = set()
     missing, total = [], 0
     queue = list(start_pages)
     while queue:
@@ -82,6 +111,22 @@ def _collect_assets(start_pages, root, dest, generated):
         for ref in _local_refs(html):
             rel = os.path.normpath(os.path.join(base, ref)).replace(os.sep, "/")
             if rel in seen or rel.startswith(".."):
+                continue
+            # A reference into a presentation deck pulls the *whole* deck dir in
+            # one shot — decks are self-contained and reference their slides in
+            # ways the scraper can't fully see (CSS url(), data-background, …).
+            m = _PRES_DECK.match(rel)
+            if m:
+                deck = m.group(1)
+                if deck not in decks:
+                    decks.add(deck)
+                    deck_dir = root / deck
+                    if deck_dir.is_dir():
+                        rels, nbytes = _copy_tree(deck_dir, dest / deck)
+                        total += nbytes
+                        seen.update(f"{deck}/{r}" for r in rels)
+                    elif not (dest / rel).exists():
+                        missing.append(rel)
                 continue
             seen.add(rel)
             src = root / rel
@@ -164,18 +209,15 @@ def export_item(root, dest, kind, ident):
         _seen, missing, _total = _collect_assets([("", html)], root, dest,
                                                  generated={"index.html"} | _CATALOG_PAGES)
     elif kind == "presentation":
-        # Mirror the self-contained deck + a root redirect to it.
-        rel = f"presentations/{ident}/index.html"
-        src = root / rel
-        if not src.is_file():
+        # Mirror the whole self-contained deck verbatim + a root redirect to it.
+        deck = f"presentations/{ident}"
+        rel = f"{deck}/index.html"
+        deck_dir = root / deck
+        if not (deck_dir / "index.html").is_file():
             raise ValueError(f"presentation not found: {rel}")
-        out = dest / rel
-        out.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, out)
+        _copy_tree(deck_dir, dest / deck)
         (dest / "index.html").write_text(_REDIRECT.format(target=rel))
-        _seen, missing, _total = _collect_assets(
-            [(f"presentations/{ident}", src.read_text(errors="ignore"))],
-            root, dest, generated={rel, "index.html"} | _CATALOG_PAGES)
+        missing = []
     else:
         raise ValueError(f"unknown export kind: {kind!r}")
 
