@@ -59,6 +59,29 @@ dropped as external (`_EXTERNAL`, `eln/share.py:20`) and won't load under
 
 </details>
 
+## ✅ 2. SDGL page absent from export — DONE (option a)
+
+**Decision (user):** pre-render a static SDGL snapshot.
+
+**Done.** `export_all` now writes the SDGL graph as the bundle's front door:
+- `eln/share.py:_write_sdgl_snapshot` dumps `SDGL.tree()` +
+  `list_findings("unmatched")` to `sdgl_data.json` (same shape the live
+  `/api/sdgl/tree` + `/scan/unmatched` return), copies the code-repo
+  `catalog/sdgl.html` into the bundle via `_staticize_sdgl` (drops `auth.js`,
+  injects `window.SDGL_STATIC = true`, repoints its own Data Graph link), and
+  redirects the bundle root `index.html` to `sdgl.html`.
+- `catalog/sdgl.html` gained a `STATIC` branch: in static mode it loads
+  `sdgl_data.json` instead of fetching the API and hides every mutating control
+  (selection checkboxes, the Backup button, the Open-in-OS buttons).
+- `_staticize` now **repoints** the Data Graph nav link/home card to `sdgl.html`
+  (instead of dropping them), so the graph is reachable from every page in the
+  bundle. `sdgl.html`/`sdgl_data.json` are treated as known generated siblings so
+  those links don't get flagged missing.
+- Tests: `test_export_all_writes_static_sdgl_snapshot` + updated staticize/layout
+  assertions in `tests/test_share.py`.
+
+<details><summary>original analysis</summary>
+
 ## 2. Homepage retired in favor of SDGL page, but SDGL page is absent from export
 
 **Current behavior:**
@@ -93,6 +116,8 @@ dynamic page (`eln/share.py:24-25,42-48`).
   is live-only.
 
 Recommend confirming desired scope before implementing (a vs b).
+
+</details>
 
 ## ✅ 3. Auto-generate a per-series report — DONE
 

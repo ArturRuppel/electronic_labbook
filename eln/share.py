@@ -8,6 +8,7 @@ so the generators' relative media links (``reports/…``, ``presentations/…``)
 untouched. Only files the pages actually reference are copied.
 """
 
+import json
 import os
 import re
 import shutil
@@ -29,10 +30,8 @@ _REF = re.compile(
 )
 # A reference that lands inside a self-contained presentation deck directory.
 _PRES_DECK = re.compile(r"^(presentations/[^/]+)/")
-# The three fixed, known server-only literals a generated page carries.
+# The server-only ``auth.js`` script a generated page carries (stripped on export).
 _AUTH_JS = re.compile(r'[ \t]*<script src="auth\.js"></script>\n?')
-_NAV_GRAPH_LINK = re.compile(r'[ \t]*<a href="/">Data Graph</a>\n?')
-_HOME_GRAPH_CARD = re.compile(r'[ \t]*<a href="/" class="card">.*?</a>\s*?\n?', re.DOTALL)
 _NAV_BLOCK = re.compile(r'[ \t]*<div class="nav">.*?</div>\s*?\n?', re.DOTALL)
 
 
@@ -51,11 +50,12 @@ def _local_refs(html):
 
 
 def _staticize(html):
-    """Drop the three server-only literals from a generated page (the Data Graph
-    nav link + home card, and the ``auth.js`` script). Media links are untouched."""
+    """Prepare a generated page for the static bundle: drop the server-only
+    ``auth.js`` script, and repoint the dynamic ``/`` (Data Graph) nav link and
+    home card at the bundle's static ``sdgl.html`` snapshot. Media links untouched."""
     html = _AUTH_JS.sub("", html)
-    html = _NAV_GRAPH_LINK.sub("", html)
-    html = _HOME_GRAPH_CARD.sub("", html)
+    html = html.replace('<a href="/">Data Graph</a>', '<a href="sdgl.html">Data Graph</a>')
+    html = html.replace('<a href="/" class="card">', '<a href="sdgl.html" class="card">')
     return html
 
 
@@ -180,7 +180,14 @@ def export_all(root, dest):
         Path(path).write_text(text)
         start_pages.append(("", text))
 
-    # 3. Transitively copy referenced assets.
+    # 3. The bundle's front door is the static SDGL graph, mirroring the live app
+    #    (which serves sdgl.html at /). Write the page + its data snapshot and
+    #    redirect the bundle root to it. Mark them as known generated siblings so
+    #    the repointed Data Graph nav links resolve (not copied, not flagged).
+    _write_sdgl_snapshot(root, dest)
+    generated.update({"sdgl.html", "sdgl_data.json", "index.html"})
+
+    # 4. Transitively copy referenced assets.
     _seen, missing, _total = _collect_assets(start_pages, root, dest, generated)
     files, total = _bundle_stats(dest)
     return {"files": files, "bytes": total, "missing": missing}
@@ -189,6 +196,35 @@ def export_all(root, dest):
 _REDIRECT = ('<!doctype html><meta charset="utf-8">'
              '<meta http-equiv="refresh" content="0; url={target}">'
              '<title>Redirecting…</title><a href="{target}">Open</a>\n')
+
+# The live SDGL page is a code-repo asset (served at / by the server), not a
+# generator output, so the export reads it straight from catalog/.
+_SDGL_SOURCE = Path(__file__).resolve().parents[1] / "catalog" / "sdgl.html"
+_SDGL_STATIC_FLAG = '    <script>window.SDGL_STATIC = true;</script>\n</head>'
+
+
+def _staticize_sdgl(html):
+    """Turn the live SDGL page into its static-bundle form: drop ``auth.js``, flip
+    on static mode (so it reads ``sdgl_data.json`` instead of the API and hides
+    every mutating control), and repoint its own Data Graph nav link at itself."""
+    html = _AUTH_JS.sub("", html)
+    html = html.replace('<a href="/">Data Graph</a>', '<a href="sdgl.html">Data Graph</a>')
+    # Set the flag in <head>, before the page's main script runs.
+    html = html.replace("</head>", _SDGL_STATIC_FLAG, 1)
+    return html
+
+
+def _write_sdgl_snapshot(root, dest):
+    """Write the static SDGL page + its ``sdgl_data.json`` snapshot into the bundle
+    and point the bundle root (``index.html``) at it. The snapshot is the same
+    payload the live ``/api/sdgl/tree`` and ``/api/sdgl/scan/unmatched`` endpoints
+    return, so the static page renders identically offline."""
+    from eln.sdgl import SDGL
+    sdgl = SDGL(root)
+    snapshot = {"tree": sdgl.tree(), "unmatched": sdgl.list_findings("unmatched")}
+    (dest / "sdgl_data.json").write_text(json.dumps(snapshot))
+    (dest / "sdgl.html").write_text(_staticize_sdgl(_SDGL_SOURCE.read_text()))
+    (dest / "index.html").write_text(_REDIRECT.format(target="sdgl.html"))
 
 
 def export_item(root, dest, kind, ident):

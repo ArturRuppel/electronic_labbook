@@ -159,6 +159,11 @@
     </main>
     <script>
         const API = '/api/sdgl';
+        // Static-bundle mode: the export injects `window.SDGL_STATIC = true` and a
+        // `sdgl_data.json` snapshot next to this page. In that mode we read the
+        // snapshot instead of the live API and hide every mutating control
+        // (selection/backup, Open-in-OS) — there is no server to talk to.
+        const STATIC = window.SDGL_STATIC === true;
         const TYPE_COLORS = {
             experiment: '#2d6f9f', protocol: '#7f5f2f', report: '#5d7290',
             presentation: '#8a6db1', dir: '#6b7b35', file: '#9aa6b0',
@@ -194,16 +199,27 @@
             button.addEventListener('click', () => showView(button.dataset.view));
         });
         document.getElementById('search').addEventListener('input', applyFilter);
-        document.getElementById('backup-btn').addEventListener('click', startBackupFlow);
-        updateBackupButton();
+        if (STATIC) {
+            document.getElementById('backup-btn').style.display = 'none';
+        } else {
+            document.getElementById('backup-btn').addEventListener('click', startBackupFlow);
+            updateBackupButton();
+        }
 
         loadAll();
 
         async function loadAll() {
-            const [tree, findings] = await Promise.all([
-                fetch(`${API}/tree`).then(r => r.json()),
-                fetch(`${API}/scan/unmatched`).then(r => r.json())
-            ]);
+            let tree, findings;
+            if (STATIC) {
+                const data = await fetch('sdgl_data.json').then(r => r.json());
+                tree = data.tree || {experiments: []};
+                findings = data.unmatched || [];
+            } else {
+                [tree, findings] = await Promise.all([
+                    fetch(`${API}/tree`).then(r => r.json()),
+                    fetch(`${API}/scan/unmatched`).then(r => r.json())
+                ]);
+            }
             treeData = tree;
             renderTree();
             renderCuration(findings);
@@ -236,7 +252,7 @@
         function makeRow({twisty, color, icon, label, meta, badge, badgeClass, check}) {
             const row = document.createElement('div');
             row.className = 'row';
-            if (check && check.keys && check.keys.length) {
+            if (!STATIC && check && check.keys && check.keys.length) {
                 const box = document.createElement('input');
                 box.type = 'checkbox';
                 box.className = 'sel-box';
@@ -506,7 +522,7 @@
                     <div><strong>${escapeHtml(loc.root_name || 'local')}</strong>${loc.stale ? ' <span class="badge warn">stale</span>' : ''}</div>
                     <div class="muted">${escapeHtml(loc.path)}</div>
                     <div class="muted">${formatBytes(loc.size)} · ${loc.mtime ? formatMtime(loc.mtime) : '—'}</div>
-                    ${loc.id ? `<button data-open="${escapeHtml(loc.id)}">Open</button>` : ''}
+                    ${(!STATIC && loc.id) ? `<button data-open="${escapeHtml(loc.id)}">Open</button>` : ''}
                 </div>
             `).join('');
             setDetail(`
