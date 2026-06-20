@@ -8,6 +8,7 @@ unified ``labbook.toml`` (see :mod:`eln.config`).
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import threading
 import webbrowser
@@ -209,6 +210,60 @@ def cmd_export(args):
     return 0
 
 
+def _parse_params(items):
+    """Parse repeated ``KEY=VALUE`` ``--param`` flags into a dict. Each value is
+    decoded as a JSON literal when possible (so ``threshold=0.5`` records the float
+    0.5 and ``flag=true`` the bool True), else kept as the raw string."""
+    params = {}
+    for item in items or []:
+        if "=" not in item:
+            raise ValueError(f"--param must be KEY=VALUE, got {item!r}")
+        key, _, value = item.partition("=")
+        try:
+            params[key] = json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            params[key] = value
+    return params
+
+
+def cmd_stamp(args):
+    """Record provenance for a produced artifact (wraps :func:`eln.analysis.stamp`).
+
+    The artifact on disk is never touched: it becomes a ``dataset`` node with a
+    ``generates`` edge carrying the recipe. ``--kind derived`` records the library
+    function/params/inputs; ``--kind curated`` records ``--tool``/``--method``."""
+    from eln.analysis import stamp
+
+    config = _load(args)
+    try:
+        params = _parse_params(args.param)
+        record = stamp(
+            args.path,
+            kind=args.kind,
+            function=args.function,
+            params=params,
+            inputs=args.input or None,
+            notebook=args.notebook,
+            tool=args.tool,
+            method=args.method,
+            produced_by=args.produced_by,
+            root=config.data_root,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Stamped {record['kind']} artifact: {record['path']}")
+    print(f"  content hash: {record['content_hash']}")
+    if record["kind"] == "derived":
+        lib = record["library"]
+        print(f"  function: {lib['function'] or '(none)'}  @ {lib['commit'] or '(no commit)'}")
+        if record["inputs"]:
+            print(f"  inputs: {len(record['inputs'])} hashed")
+    else:
+        print(f"  tool: {record['tool']}  method: {record['method']}")
+    return 0
+
+
 # ---- parser --------------------------------------------------------------
 
 def build_parser():
@@ -253,6 +308,23 @@ def build_parser():
     p.add_argument("--port", type=int, default=5000)
     p.add_argument("--no-browser", action="store_true", help="do not open a browser")
     p.set_defaults(func=cmd_backup)
+
+    p = sub.add_parser("stamp",
+                       help="record provenance for a produced artifact (no file is touched)")
+    p.add_argument("path", help="the artifact to stamp (under the data root, or absolute)")
+    p.add_argument("--kind", choices=["derived", "curated"], default="derived",
+                   help="derived = code-produced (default); curated = human-made")
+    p.add_argument("--function", help="dotted name of the producing function (derived)")
+    p.add_argument("--param", action="append", metavar="KEY=VALUE",
+                   help="a call parameter to record (repeatable; derived)")
+    p.add_argument("--input", action="append", metavar="PATH",
+                   help="an input file to fingerprint (repeatable; derived)")
+    p.add_argument("--notebook", help="path of the producing notebook (derived)")
+    p.add_argument("--tool", help="the tool used (curated, required)")
+    p.add_argument("--method", help="how it was made (curated, required)")
+    p.add_argument("--produced-by", metavar="experiment:CODE-NN",
+                   help="producing experiment node (else inferred from the path)")
+    p.set_defaults(func=cmd_stamp)
 
     p = sub.add_parser("export", help="write a self-contained static HTML bundle")
     g = p.add_mutually_exclusive_group(required=True)

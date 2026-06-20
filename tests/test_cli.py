@@ -88,6 +88,70 @@ def test_ensure_db_does_not_clobber_live_db(tmp_path):
     assert "live" in names  # untouched
 
 
+def test_stamp_subcommand_in_parser():
+    parser = build_parser()
+    sub = next(a for a in parser._actions if a.dest == "command")
+    assert "stamp" in sub.choices
+
+
+def test_parse_params_json_then_string():
+    from eln.cli import _parse_params
+    assert _parse_params(["threshold=0.5", "n=3", "flag=true", "name=foo"]) == {
+        "threshold": 0.5, "n": 3, "flag": True, "name": "foo",
+    }
+    with pytest.raises(ValueError):
+        _parse_params(["bogus"])  # no '='
+
+
+def test_cli_stamp_derived_records_node_and_edge(monkeypatch, tmp_path, capsys):
+    import json
+    import eln.cli as cli
+    monkeypatch.setattr(cli, "_load", lambda args: Config(data_root=tmp_path))
+    art = tmp_path / "data" / "SORVI-01" / "analysis" / "plot.png"
+    art.parent.mkdir(parents=True)
+    art.write_bytes(b"PNGDATA")
+
+    rc = cli.main(["stamp", str(art), "--function", "mylib.run",
+                   "--param", "threshold=0.5"])
+    assert rc == 0
+    assert "Stamped derived artifact" in capsys.readouterr().out
+
+    node_id = "dataset:data/SORVI-01/analysis/plot.png"
+    conn = sqlite3.connect(str(tmp_path / "sdgl.db"))
+    node = conn.execute("SELECT 1 FROM nodes WHERE id = ?", (node_id,)).fetchone()
+    edge = conn.execute(
+        "SELECT metadata FROM edges WHERE source_id = ? AND target_id = ? "
+        "AND relation_type = 'generates'",
+        ("experiment:SORVI-01", node_id),
+    ).fetchone()
+    conn.close()
+    assert node is not None                       # artifact became a dataset node
+    assert edge is not None                        # generates edge from the experiment
+    assert json.loads(edge[0])["params"]["threshold"] == 0.5  # param parsed as float
+
+
+def test_cli_stamp_curated_requires_tool_and_method(monkeypatch, tmp_path, capsys):
+    import eln.cli as cli
+    monkeypatch.setattr(cli, "_load", lambda args: Config(data_root=tmp_path))
+    art = tmp_path / "data" / "SORVI-01" / "fig.png"
+    art.parent.mkdir(parents=True)
+    art.write_bytes(b"x")
+    rc = cli.main(["stamp", str(art), "--kind", "curated"])  # missing tool/method
+    assert rc == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def test_cli_stamp_uninferable_producer_errors(monkeypatch, tmp_path, capsys):
+    import eln.cli as cli
+    monkeypatch.setattr(cli, "_load", lambda args: Config(data_root=tmp_path))
+    art = tmp_path / "figures" / "fig3.png"   # no CODE-NN component in the path
+    art.parent.mkdir(parents=True)
+    art.write_bytes(b"x")
+    rc = cli.main(["stamp", str(art)])
+    assert rc == 1
+    assert "produced_by" in capsys.readouterr().err
+
+
 def test_backup_subcommand_parses(monkeypatch):
     import eln.cli as cli
     called = {}
