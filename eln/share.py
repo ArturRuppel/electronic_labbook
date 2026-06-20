@@ -89,7 +89,8 @@ _HTML_SUFFIXES = {".html", ".htm"}
 # intentionally absent; their cross-links are inert and must not be flagged as
 # missing assets.
 _CATALOG_PAGES = {"index.html", "experiments.html", "protocols.html",
-                  "reports.html", "presentations.html", "admin.html", "sdgl.html"}
+                  "notebooks.html", "reports.html", "presentations.html",
+                  "admin.html", "sdgl.html"}
 
 
 def _collect_assets(start_pages, root, dest, generated):

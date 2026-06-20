@@ -115,10 +115,11 @@ def test_generate_all_writes_all_pages(data_root):
     root, db, expected = data_root
     written = generate_all(root)
     catalog = root / "catalog"
-    for page in ("experiments.html", "protocols.html", "reports.html",
-                 "presentations.html", "index.html"):
+    for page in ("experiments.html", "protocols.html", "notebooks.html",
+                 "reports.html", "presentations.html", "index.html"):
         assert (catalog / page).exists(), f"{page} missing"
-    assert set(written) == {"experiments", "protocols", "reports", "presentations", "home"}
+    assert set(written) == {"experiments", "protocols", "notebooks", "reports",
+                            "presentations", "home"}
 
 
 def test_catalog_has_ids_and_derived_dates(data_root):
