@@ -222,3 +222,18 @@ def test_export_item_unknown_kind(data_root, tmp_path):
     from eln.share import export_item
     with pytest.raises(ValueError):
         export_item(data_root, tmp_path / "x", "bogus", "whatever")
+
+
+def test_export_all_deterministic(data_root, tmp_path):
+    import filecmp
+    from eln.share import export_all
+    a, b = tmp_path / "a", tmp_path / "b"
+    export_all(data_root, a)
+    export_all(data_root, b)
+    mismatches = []
+    for fa in a.rglob("*"):
+        if fa.is_file():
+            fb = b / fa.relative_to(a)
+            if not (fb.is_file() and filecmp.cmp(fa, fb, shallow=False)):
+                mismatches.append(str(fa.relative_to(a)))
+    assert mismatches == []
