@@ -187,6 +187,11 @@ def stamp(
     finally:
         conn.close()
 
+    # Persist the provenance subgraph to the committed, git-tracked form so the
+    # stamp survives an sdgl.db rebuild (and reaches other machines via publish).
+    from eln.sdgl.provenance_store import dump_provenance
+    dump_provenance(sdgl)
+
     return record
 
 

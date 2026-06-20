@@ -340,30 +340,36 @@ the recipe isn't durably versioned and the 🔏 rendering vanishes on a fresh
 `sdgl.db` (e.g. CI). A committed, portable dump of the provenance subgraph
 (reloaded on rebuild, like `experiments.sql`) is the next step.
 
-## 7. Persist the provenance graph to git (durable, portable)
+## 🟡 7. Persist the provenance graph to git — DONE (dump+reload); path-portability remains
 
 **Why:** after #6, curated artifact *files* are committed, but their provenance
-**graph** — `dataset` nodes + `generates`/`derived_from` edges with the recipe
-(function, commits, params, input fingerprints, or tool/method) — is written only
-to `sdgl.db`, which `.gitignore` excludes as a build artifact and which is rebuilt
-by scanning. Unlike `experiments.db` (committed, diffable source-of-truth
-`experiments.sql`), the graph has **no committed form**, so provenance is not
-versioned, not shareable, and absent on CI / a fresh checkout (the static
-export's SDGL snapshot would then show no artifacts).
+**graph** — `dataset` nodes + `generates`/`derived_from` edges with the recipe —
+was written only to `sdgl.db`, a gitignored build artifact, so provenance was not
+versioned and vanished on a rebuild (CI / fresh checkout → static SDGL snapshot
+shows no artifacts).
 
-**What to build:**
-1. Dump the provenance subgraph (dataset/aggregate nodes + `generates` /
-   `derived_from` edges) to a tracked, line-diffable file in the data repo (e.g.
-   `provenance.json` or a `.sql` like `experiments.sql`); add it to
-   `PUBLISH_PATHS`.
-2. Reload it into `sdgl.db` on init/scan so a rebuilt graph is repopulated
-   (mirror the `experiments.sql → experiments.db` rebuild lifecycle).
-3. **Portable path model:** today `stamp()`'s `rel_path` is relative to
-   `data_root` and falls back to the **absolute path** when the artifact is
-   outside the repo (the common case for derived data on external drives). Store a
-   portable `(root_name, rel_path)` key (the scanner's model) so derived
-   references resolve on any machine with the same scan roots configured.
-   (Curated is already portable post-#6, since the file is copied into the repo.)
+**Done (parts 1–2):** new `eln/sdgl/provenance_store.py` mirrors the
+`experiments.db ↔ experiments.sql` pattern for the provenance subgraph:
+- `dump_provenance(sdgl)` writes the `dataset` nodes + `generates`/`derived_from`
+  edges to a deterministic, line-diffable `provenance.json` in the data repo (the
+  experiment nodes are left out — they're rebuilt by scanning). `stamp()` calls it
+  automatically after every commit, so the CLI and the server Commit button both
+  persist for free.
+- `load_provenance(sdgl)` replays `provenance.json` back into the graph;
+  `scan_roots()` calls it at the end, so a from-scratch `sdgl.db` rebuild restores
+  every stamp (idempotent upsert).
+- `provenance.json` added to `PUBLISH_PATHS` so it's committed on publish.
+- Tests: `tests/sdgl/test_provenance_store.py` (dump captures only the subgraph;
+  load restores after deleting `sdgl.db`; a scan replays committed provenance;
+  empty graph removes a stale file; `stamp()` auto-dumps).
+
+**Remaining (part 3) — portable path model:** `stamp()`'s `rel_path` is relative
+to `data_root` and falls back to the **absolute path** when the artifact is
+outside the repo (the common case for *derived* data on external drives), making
+that node id machine-specific. Store a portable `(root_name, rel_path)` key (the
+scanner's model) so derived references resolve on any machine with the same scan
+roots. (Curated is already portable — #6 copies the file into the repo, so its
+`rel_path` is repo-relative. This only affects derived/by-reference stamps.)
 
 <details><summary>original gap analysis</summary>
 

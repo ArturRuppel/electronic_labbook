@@ -1020,6 +1020,10 @@ class SDGL:
                     eln.close()
         finally:
             conn.close()
+        # A scan rebuilds the scanned graph; replay committed provenance (dataset
+        # nodes + generates/derived_from edges) so stamps survive the rebuild.
+        from eln.sdgl.provenance_store import load_provenance
+        load_provenance(self)
         if progress:
             progress({"phase": "done", "summary": summary})
         return summary
