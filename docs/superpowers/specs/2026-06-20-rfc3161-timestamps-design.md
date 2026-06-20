@@ -66,8 +66,18 @@ compliance differentiator and open-source selling point.
 | Trigger | **Automatic in `publish`, best-effort** — TSA unreachable never blocks publishing |
 | Dependency | **`rfc3161ng`** (first runtime third-party dep in the compliance stack; layers 1–2 were stdlib-only) |
 | Token storage | `timestamps/` directory in the data repo, committed + pushed |
-| Default TSA | **freeTSA.org** (free, general-purpose, publishes verification certs) |
-| TSA cert | **Bundled** for out-of-the-box verification, overridable via config |
+| Default TSA | **DigiCert** (`http://timestamp.digicert.com`) — free, no auth, **RSA-signed** |
+| TSA cert | **Bundled DigiCert Trusted Root G4** as trust anchor; the per-token signer cert is embedded in the token and verified against the root |
+
+> **Implementation note (supersedes the original freeTSA choice):** freeTSA was
+> the spec's first pick, but it migrated to an **EC** signing key that
+> `rfc3161ng` 2.1.3 (the latest release) cannot verify
+> (`ECPublicKey.verify()` arity mismatch). The implementation therefore defaults
+> to **DigiCert's RSA** timestamping service, which `rfc3161ng` verifies, and
+> verifies the signature against the **signer certificate embedded in the token**
+> (robust to TSA cert rotation), confirming that signer chains to the bundled
+> self-signed **DigiCert Trusted Root G4**. Any RFC 3161 TSA whose signer chains
+> to a bundled root works via the `[timestamp]` config.
 
 ## What gets timestamped — the snapshot digest
 
@@ -133,9 +143,11 @@ In `eln/server/publish.py`, after dump + `git add` of the publishable paths but
 
 ## Verification
 
-- `eln/timestamp.py: verify_token(token, digest, tsa_cert) -> {valid, gen_time, reason}`
-  — verifies the TSA signature against the configured cert chain, checks the
-  token's `messageImprint` equals `snapshot_digest`, and extracts `gen_time`.
+- `eln/timestamp.py: verify_token(token, digest, cert_bytes) -> {valid, gen_time, reason}`
+  — verifies the signature against the signer cert **embedded in the token**,
+  checks the token's `messageImprint` equals `snapshot_digest`, confirms the
+  signer chains to a bundled trusted root in `cert_bytes`, and extracts
+  `gen_time`.
 - **`labbook verify`** gains a *timestamps* section beside the existing
   file-hash report (layer 1):
   - verify each `ok` token (signature + imprint + cert chain);
@@ -155,13 +167,13 @@ New `[timestamp]` section in `labbook.toml`:
 
 ```toml
 [timestamp]
-enabled = true                         # default true
-tsa_url = "https://freetsa.org/tsr"    # default free public TSA
-tsa_cert = ""                          # path to TSA CA/cert chain; empty -> bundled freeTSA cert
+enabled = true                            # default true
+tsa_url = "http://timestamp.digicert.com" # default free public RSA TSA
+tsa_cert = ""                             # path to trusted root(s) PEM; empty -> bundled DigiCert Root G4
 ```
 
-The bundled freeTSA cert chain ships in the code repo so verification works
-out-of-the-box; `tsa_cert` overrides it for a different TSA.
+The bundled DigiCert Trusted Root G4 ships in the code repo so verification
+works out-of-the-box; `tsa_cert` overrides the trust anchor for a different TSA.
 
 ## Dependency
 

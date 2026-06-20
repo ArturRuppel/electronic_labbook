@@ -31,3 +31,15 @@ path = "data"
 #     ["GFP", "488", "FITC"],
 #     ["RFP", "561", "mCherry"],
 # ]
+
+# RFC 3161 trusted timestamps (Roadmap step 11, layer 3). On `labbook publish`,
+# a SHA-256 digest of the published snapshot is anchored to a signed token from
+# a Time Stamping Authority and committed under timestamps/ — cryptographic
+# proof-of-existence-at-a-time that even git can't provide. Best-effort: a TSA
+# outage records a "pending" entry (retry with `labbook timestamp --retry`) and
+# never blocks publishing. `labbook verify` checks the tokens. Enabled by
+# default; the defaults below need no [timestamp] section at all.
+# [timestamp]
+# enabled = true
+# tsa_url = "http://timestamp.digicert.com"  # free, RSA-signed, no auth
+# tsa_cert = ""  # path to trusted-root PEM; empty uses the bundled DigiCert root

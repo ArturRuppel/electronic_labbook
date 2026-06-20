@@ -316,9 +316,26 @@ from its last committed version.
 
 ### 11. Compliance layer
 Content hashing (additive to scan — can begin once the SDGL engine lands) →
-hash-chained audit log → RFC 3161 trusted timestamps, per the
+~~hash-chained audit log~~ → RFC 3161 trusted timestamps, per the
 [Compliance layer](#compliance-layer-the-value-add-that-motivates-open-sourcing).
 Content hashing also feeds step 8's duplicate-dedup.
+
+- **Layer 1 — content hashing** · _done_ (see step 11 above).
+- **Layer 2 — hash-chained audit log** · **dropped as redundant with git**. Git
+  commits are already an append-only, hash-chained, tamper-evident Merkle DAG over
+  everything committed (`experiments.sql` + the data repo), pushed off-machine to
+  private GitHub; a bespoke `audit.jsonl` over the same notebook edits only
+  reimplements that. See the layer-3 design spec's "Why this layer — and why not
+  layer 2" section.
+- **Layer 3 — RFC 3161 trusted timestamps** · _done_: each `publish` anchors a
+  `sha256` digest of the published snapshot (a sorted file manifest) to a signed
+  TSA token committed under `timestamps/`, best-effort (TSA failure → `pending`,
+  retried by `labbook timestamp --retry`). `labbook verify` and
+  `GET /api/timestamp/verify` verify each token (signature against the embedded
+  signer cert, chained to the bundled DigiCert Trusted Root G4) and that the live
+  snapshot is still anchored. Default TSA is DigiCert (RSA) — freeTSA's EC key is
+  unverifiable by `rfc3161ng`. Spec:
+  [docs/superpowers/specs/2026-06-20-rfc3161-timestamps-design.md](superpowers/specs/2026-06-20-rfc3161-timestamps-design.md).
 
 ## Analysis code provenance
 
@@ -542,5 +559,14 @@ done: an opt-in `[scanner].content_hashing` flag stores a `sha256:` per file in
 the SDGL `file_locations` table, recomputed only when size/mtime drift; `labbook
 scan --hash` forces it for one run and `labbook verify` (and `POST
 /api/sdgl/verify-hashes`) recomputes hashes to flag corruption or tampering.
-Next on the compliance layer (step 11): the hash-chained audit log, then RFC 3161
-trusted timestamps. Sharing (Phase F) is intentionally last.
+**Step 11, layer 2** (hash-chained audit log) was **dropped as redundant with
+git** (git commits are already a hash-chained, tamper-evident, off-machine
+Merkle history of everything published). **Step 11, layer 3 — RFC 3161 trusted
+timestamps — is done:** `labbook publish` best-effort anchors a `sha256` digest
+of the published snapshot to a signed DigiCert TSA token committed under
+`timestamps/` (TSA failure → `pending`, retried via `labbook timestamp
+--retry`); `labbook verify` and `GET /api/timestamp/verify` verify each token
+(signature against the embedded signer cert, chained to the bundled DigiCert
+Trusted Root G4) and that the live snapshot is still anchored. With the
+compliance layer complete, **Sharing (Phase F, step 12)** — static bundles to the
+Gaia share + selective GitHub Pages — is the remaining major work.
