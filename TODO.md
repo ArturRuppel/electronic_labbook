@@ -94,6 +94,37 @@ dynamic page (`eln/share.py:24-25,42-48`).
 
 Recommend confirming desired scope before implementing (a vs b).
 
+## ✅ 3. Auto-generate a per-series report — DONE
+
+**Decisions (resolved by user):** committed markdown stubs, marker-delimited
+generated block.
+
+**Done.** New `generate_series_reports(root)` in `eln/generators/reports.py`
+scaffolds/refreshes one auto report per series under `reports/auto/<CODE>.md`.
+Each stub carries a marker-delimited block (`<!-- AUTO:START -->` …
+`<!-- AUTO:END -->`) containing `**Series:** CODE`, an optional `**Date:**`
+(earliest file-derived date, same source as the overview table), and
+`{{experiments}}`. Because it declares `**Series:** CODE`, the existing
+`generate_reports` `{{experiments}}` path renders it and the SDGL
+`_sync_reports` scanner indexes it — zero extra wiring. Dedup: a series already
+covered by a hand-authored report (declared *outside* `reports/auto/`) is skipped
+(exactly one report per series), and the auto stub never counts as claiming its
+own series. Regeneration rewrites only the marked block (refreshing the date),
+preserving prose a human adds around it. Exposed as
+`python -m eln.generators.reports <root> --scaffold-series`. It is a deliberate
+scaffolding step (writes into the data repo's `reports/`), **not** part of the
+read-only `generate_all` catalog build. Tests:
+`tests/generators/test_series_reports.py`.
+
+Note: this scaffolds stubs for series lacking a report; it does **not**
+auto-rewrite existing hand-authored reports in place ("migrate existing reports").
+Those already render the same `{{experiments}}` block via their own
+`**Series:**` line, so no migration is required for them to work — wrapping their
+generated bits in `AUTO` markers (so the scaffolder could refresh their date too)
+is left as optional follow-up.
+
+<details><summary>original notes</summary>
+
 ## 3. Auto-generate a per-series report; migrate existing reports to it
 
 **Goal:** every experiment series should automatically get a report whose title is
@@ -163,6 +194,8 @@ zero extra wiring — and rendered by the existing `{{experiments}}` path. Concr
 - **Authoring overlay:** how a human adds prose to an auto report without it being
   overwritten on regeneration (e.g. a generated block delimited by markers, with a
   free-text section the generator never touches).
+
+</details>
 
 ## ✅ 4. Add a per-protocol export button (mirror reports & presentations) — DONE
 

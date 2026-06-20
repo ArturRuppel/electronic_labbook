@@ -592,6 +592,103 @@ def extract_report_date(content, report_file):
     return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
 
 
+# Markers delimiting the generator-owned region of an auto series report. The
+# scaffolder only ever rewrites the text *between* these markers, so prose a human
+# adds outside them survives regeneration.
+AUTO_START = "<!-- AUTO:START -->"
+AUTO_END = "<!-- AUTO:END -->"
+AUTO_SUBDIR = "auto"
+_AUTO_BLOCK_RE = re.compile(re.escape(AUTO_START) + r".*?" + re.escape(AUTO_END), re.DOTALL)
+
+
+def _series_earliest_date(code, title, eln_conn, sdgl_conn):
+    """Earliest file-derived start date across a series' active repetitions, or
+    None when no raw-file dates are known (same source as the overview table)."""
+    dates = []
+    for exp in eln_conn.execute(
+        "SELECT repetition FROM experiments WHERE experiment_type = ? AND excluded = 0",
+        (title,),
+    ):
+        node_id = "experiment:" + format_experiment_id(code, exp["repetition"], False)
+        derived = get_experiment_date_from_files(sdgl_conn, node_id)
+        if derived:
+            dates.append(derived)
+    return min(dates) if dates else None
+
+
+def _auto_block(code, date):
+    """The generator-owned skeleton for a series report: the ``**Series:** CODE``
+    line the scanner keys off, an optional ``**Date:**``, and the
+    ``{{experiments}}`` token rendered by :func:`generate_reports`."""
+    lines = [AUTO_START, f"**Series:** {code}", ""]
+    if date:
+        lines += [f"**Date:** {date}", ""]
+    lines += [PLACEHOLDER, AUTO_END]
+    return "\n".join(lines)
+
+
+def generate_series_reports(root):
+    """Scaffold/refresh one auto report per experiment series under
+    ``reports/auto/<CODE>.md``.
+
+    Each stub carries a marker-delimited generated block (``**Series:** CODE`` +
+    ``{{experiments}}``) that the existing report pipeline renders and the SDGL
+    scanner indexes — no extra wiring. A series already covered by a hand-authored
+    report (any report *outside* ``reports/auto/`` that declares it) is skipped, so
+    there is exactly one report per series. Regeneration rewrites only the marked
+    block (refreshing the date), preserving any prose a human added around it.
+    Returns the list of written stub paths.
+    """
+    root = Path(root)
+    reports_dir = root / "reports"
+    auto_dir = reports_dir / AUTO_SUBDIR
+    database_path = root / DEFAULT_DB_NAME
+    sdgl_db_path = root / DEFAULT_SDGL_DB_NAME
+
+    eln_conn = sqlite3.connect(database_path)
+    eln_conn.row_factory = sqlite3.Row
+    sdgl_conn = None
+    if sdgl_db_path.exists():
+        sdgl_conn = sqlite3.connect(sdgl_db_path)
+        sdgl_conn.row_factory = sqlite3.Row
+
+    # Series already claimed by a hand-authored report (declared outside auto/).
+    human_claimed = set()
+    if reports_dir.exists():
+        for f in reports_dir.glob("**/*.md"):
+            if f.name.lower() == "readme.md" or auto_dir in f.parents:
+                continue
+            declared = parse_series(f.read_text())
+            if declared:
+                human_claimed.add(declared)
+
+    written = []
+    for row in eln_conn.execute("SELECT code, title FROM experiment_codes ORDER BY code"):
+        code, title = row["code"], row["title"]
+        if code in human_claimed:
+            continue
+        block = _auto_block(code, _series_earliest_date(code, title, eln_conn, sdgl_conn))
+        auto_path = auto_dir / f"{code}.md"
+        if auto_path.exists():
+            text = auto_path.read_text()
+            # Replace only the marked block; never use re.sub's template (the block
+            # holds literal braces/backslashes), so pass a function replacement.
+            if _AUTO_BLOCK_RE.search(text):
+                text = _AUTO_BLOCK_RE.sub(lambda _m: block, text, count=1)
+            else:
+                text = block + "\n\n" + text
+        else:
+            text = block + "\n"
+        auto_dir.mkdir(parents=True, exist_ok=True)
+        auto_path.write_text(text)
+        written.append(auto_path)
+
+    eln_conn.close()
+    if sdgl_conn is not None:
+        sdgl_conn.close()
+    return written
+
+
 def generate_reports(root, catalog_out=None, plugins=None, only=None,
                      output_name="reports.html"):
     """Generate ``reports.html`` from markdown reports under *root*.
@@ -734,7 +831,13 @@ def main(argv=None):
     parser.add_argument("root", type=Path, help="data-repo root (holds reports/, experiments.db)")
     parser.add_argument("--catalog-out", type=Path, default=None,
                         help="output directory (default: ROOT/catalog)")
+    parser.add_argument("--scaffold-series", action="store_true",
+                        help="create/refresh one auto report per series under "
+                             "reports/auto/ before rendering")
     args = parser.parse_args(argv)
+    if args.scaffold_series:
+        written = generate_series_reports(args.root)
+        print(f"Scaffolded {len(written)} series report(s) under reports/auto/.")
     generate_reports(args.root, args.catalog_out)
 
 
