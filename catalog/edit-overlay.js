@@ -13,6 +13,7 @@
         <a class="eln-toolbar-btn add" href="/admin.html#protocols">+ Protocol</a>
         <a class="eln-toolbar-btn add" href="/admin.html#reports">+ Report</a>
         <button class="eln-toolbar-btn publish" id="eln-publish-btn">Publish</button>
+        <button class="eln-toolbar-btn" id="eln-export-btn">Export catalog</button>
     `;
     document.body.appendChild(toolbar);
 
@@ -64,6 +65,52 @@
             btn.textContent = 'Publish';
         });
     });
+
+    // --- Export (catalog or a single item): choose folder → preview → confirm → start ---
+    function postJSON(url, body) {
+        return fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        }).then(function(r) { return r.json(); });
+    }
+
+    function runExport(mode, id, label) {
+        showToast('Choosing destination…', 'info');
+        fetch('/api/sdgl/backup/choose-folder', {method: 'POST'})
+            .then(function(r) { return r.json(); })
+            .then(function(folder) {
+                var dest = folder && folder.path;
+                if (!dest) { showToast('Export cancelled.', 'info'); return; }
+                return postJSON('/api/export/preview', {mode: mode, id: id, dest: dest})
+                    .then(function(p) {
+                        if (p.error) { showToast('Error: ' + p.error, 'error'); return; }
+                        var kb = Math.round(p.bytes / 1024);
+                        var msg = 'Export ' + label + ': ' + p.files + ' files (' + kb + ' KB) to ' + dest + '.';
+                        if (p.dest_nonempty) { msg += '\nThe destination already contains files — overwrite?'; }
+                        msg += '\n\nProceed?';
+                        if (!window.confirm(msg)) { showToast('Export cancelled.', 'info'); return; }
+                        showToast('Exporting ' + label + '…', 'info');
+                        return postJSON('/api/export/start', {mode: mode, id: id, dest: dest})
+                            .then(function(d) {
+                                if (d.error) { showToast('Error: ' + d.error, 'error'); return; }
+                                var done = 'Exported ' + d.files + ' files to ' + dest;
+                                if (d.missing && d.missing.length) {
+                                    done += ' (' + d.missing.length + ' missing asset(s) skipped)';
+                                }
+                                showToast(done, 'success');
+                            });
+                    });
+            })
+            .catch(function(err) { showToast('Network error: ' + err.message, 'error'); });
+    }
+
+    var exportBtn = document.getElementById('eln-export-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', function() {
+            runExport('all', '', 'catalog');
+        });
+    }
 
     // --- Edit buttons per page ---
     var page = location.pathname.split('/').pop() || 'sdgl.html';
@@ -123,6 +170,40 @@
             a.textContent = 'Edit';
             a.style.float = 'right';
             card.insertBefore(a, card.firstChild);
+
+            var src = card.getAttribute('data-report-src');
+            if (src) {
+                var ex = document.createElement('a');
+                ex.className = 'eln-edit-btn';
+                ex.textContent = 'Export';
+                ex.href = '#';
+                ex.style.float = 'right';
+                ex.style.marginRight = '0.5rem';
+                ex.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    runExport('report', src, 'report');
+                });
+                card.insertBefore(ex, card.firstChild);
+            }
+        });
+    }
+
+    if (page === 'presentations.html') {
+        // Add an Export button to each presentation row.
+        var prows = document.querySelectorAll('tr[data-pres-dir]');
+        prows.forEach(function(row) {
+            var dir = row.getAttribute('data-pres-dir');
+            var td = document.createElement('td');
+            var ex = document.createElement('a');
+            ex.className = 'eln-edit-btn';
+            ex.textContent = 'Export';
+            ex.href = '#';
+            ex.addEventListener('click', function(e) {
+                e.preventDefault();
+                runExport('presentation', dir, 'presentation');
+            });
+            td.appendChild(ex);
+            row.appendChild(td);
         });
     }
 })();
