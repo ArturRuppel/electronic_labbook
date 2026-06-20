@@ -287,12 +287,14 @@ full unit tests added. The design spec and implementation plan
 (`docs/superpowers/{specs,plans}/2026-06-20-notebooks*.md`) were executed and
 removed from the working tree (kept in git history, per the plan's final step).
 
-## ✅ 6. Interface to commit (stamp) artifacts — DONE (CLI + SDGL rendering)
+## ✅ 6. Interface to commit (stamp) artifacts — DONE (CLI + SDGL rendering + server Commit)
 
 **Decision (user):** CLI subcommand. Plus: committed artifacts get special
-rendering in the SDGL explorer.
+rendering in the SDGL explorer. Plus: a server **Commit** button next to Backup,
+using the same checkboxes — and, crucially, **curated artifacts are versioned
+like code** (the file itself is copied into the data repo, not just referenced).
 
-**Done — two parts:**
+**Done — three parts:**
 
 1. **`labbook stamp` CLI** (`eln/cli.py`): wraps `eln.analysis.stamp`, so an
    artifact can be committed without writing Python. The file on disk is never
@@ -315,6 +317,53 @@ rendering in the SDGL explorer.
      recipe (function, library/data commits, params, input fingerprints, or
      tool/method). Flows through to the **static bundle** for free, since the
      export dumps `tree()` to `sdgl_data.json` and copies `sdgl.html`.
+
+3. **Server Commit button** (`catalog/sdgl.html` + `eln/server/app.py`):
+   a "Commit… (N)" button beside "Backup… (N)" in the SDGL toolbar, driven by the
+   **same selection checkboxes**. `POST /api/sdgl/provenance/stamp` resolves the
+   selection to on-disk files (reusing the backup resolver) and, per the README's
+   content classification:
+   - **curated** (default) — the hand-made file is **copied into the data repo** at
+     `curated/<EXPERIMENT-ID>/<path-relative-to-the-experiment>` (only the
+     experiment-relative path is preserved, never the external absolute path), then
+     stamped (`tool`/`method`). `curated/` was added to `PUBLISH_PATHS`, so these
+     files are committed to git on publish — *versioned like code*.
+   - **derived** — recorded by reference only (no copy), the existing stamp path.
+   Validates curated `tool`/`method` up front so a bad request leaves no orphan
+   copy. Tests: `tests/server/test_provenance_stamp.py`. (Static mode hides the
+   button — no server to talk to.)
+
+**Remaining gap → see #7:** the curated *files* are now in git, but the
+provenance **graph** (dataset nodes + `generates`/`derived_from` edges, incl. the
+recipe metadata) still lives only in `sdgl.db`, a rebuildable build artifact. So
+the recipe isn't durably versioned and the 🔏 rendering vanishes on a fresh
+`sdgl.db` (e.g. CI). A committed, portable dump of the provenance subgraph
+(reloaded on rebuild, like `experiments.sql`) is the next step.
+
+## 7. Persist the provenance graph to git (durable, portable)
+
+**Why:** after #6, curated artifact *files* are committed, but their provenance
+**graph** — `dataset` nodes + `generates`/`derived_from` edges with the recipe
+(function, commits, params, input fingerprints, or tool/method) — is written only
+to `sdgl.db`, which `.gitignore` excludes as a build artifact and which is rebuilt
+by scanning. Unlike `experiments.db` (committed, diffable source-of-truth
+`experiments.sql`), the graph has **no committed form**, so provenance is not
+versioned, not shareable, and absent on CI / a fresh checkout (the static
+export's SDGL snapshot would then show no artifacts).
+
+**What to build:**
+1. Dump the provenance subgraph (dataset/aggregate nodes + `generates` /
+   `derived_from` edges) to a tracked, line-diffable file in the data repo (e.g.
+   `provenance.json` or a `.sql` like `experiments.sql`); add it to
+   `PUBLISH_PATHS`.
+2. Reload it into `sdgl.db` on init/scan so a rebuilt graph is repopulated
+   (mirror the `experiments.sql → experiments.db` rebuild lifecycle).
+3. **Portable path model:** today `stamp()`'s `rel_path` is relative to
+   `data_root` and falls back to the **absolute path** when the artifact is
+   outside the repo (the common case for derived data on external drives). Store a
+   portable `(root_name, rel_path)` key (the scanner's model) so derived
+   references resolve on any machine with the same scan roots configured.
+   (Curated is already portable post-#6, since the file is copied into the repo.)
 
 <details><summary>original gap analysis</summary>
 

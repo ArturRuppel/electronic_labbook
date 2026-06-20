@@ -48,6 +48,7 @@
         #tree { padding: 0.4rem 0.25rem; }
         .sel-box { margin: 0 0.35rem 0 0; cursor: pointer; }
         .backup-btn { margin-left: auto; }
+        #backup-btn { margin-left: 0.4rem; }   /* sit beside Commit, not pushed away */
         .backup-btn:disabled { opacity: 0.5; cursor: default; }
         .backup-panel { padding: 0.6rem; }
         .backup-panel .row { margin: 0.3rem 0; }
@@ -147,6 +148,7 @@
                     <button id="tab-curation" data-view="curation-view">Curation</button>
                 </div>
                 <input id="search" type="search" placeholder="Search title or tags">
+                <button id="commit-btn" class="backup-btn" disabled>Commit… (0)</button>
                 <button id="backup-btn" class="backup-btn" disabled>Backup… (0)</button>
             </div>
             <div id="explorer-view" class="view active">
@@ -186,6 +188,7 @@
         function toggleKeys(keys, on) {
             keys.forEach(k => { if (on) selected.add(k); else selected.delete(k); });
             updateBackupButton();
+            updateCommitButton();
         }
 
         function nodeKeysForExperiment(exp) {
@@ -209,9 +212,12 @@
         document.getElementById('search').addEventListener('input', applyFilter);
         if (STATIC) {
             document.getElementById('backup-btn').style.display = 'none';
+            document.getElementById('commit-btn').style.display = 'none';
         } else {
             document.getElementById('backup-btn').addEventListener('click', startBackupFlow);
+            document.getElementById('commit-btn').addEventListener('click', startCommitFlow);
             updateBackupButton();
+            updateCommitButton();
         }
 
         loadAll();
@@ -652,6 +658,87 @@
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({location_id: locationId})
             });
+        }
+
+        // ---- Commit (stamp provenance) --------------------------------------
+
+        function updateCommitButton() {
+            const btn = document.getElementById('commit-btn');
+            btn.textContent = `Commit… (${selected.size})`;
+            btn.disabled = selected.size === 0;
+        }
+
+        function startCommitFlow() {
+            const selections = collectSelections();
+            if (!selections.length) return;
+            // Curated (default): copied into the data repo and versioned like code.
+            // Derived: recorded by reference (the recipe lives in the producing code).
+            setDetail(`
+                <div class="backup-panel">
+                    <h2>Commit ${selections.length} selected file(s)</h2>
+                    <div class="row">
+                        <label>Kind
+                            <select id="commit-kind">
+                                <option value="curated" selected>curated — copy into the repo, version like code</option>
+                                <option value="derived">derived — record by reference only</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div id="commit-curated">
+                        <div class="row"><label>Tool <input id="commit-tool" type="text" placeholder="e.g. napari, Illustrator"></label></div>
+                        <div class="row"><label>Method <input id="commit-method" type="text" placeholder="e.g. manual segmentation"></label></div>
+                    </div>
+                    <div id="commit-derived" class="hidden">
+                        <div class="row"><label>Function <input id="commit-function" type="text" placeholder="dotted name, e.g. mylib.tfm.compute"></label></div>
+                    </div>
+                    <div class="row warn">Curated files are copied into <code>curated/&lt;EXPERIMENT-ID&gt;/…</code> in the data repo and committed on publish.</div>
+                    <div class="row"><button id="commit-go">Commit</button></div>
+                    <div class="row" id="commit-result"></div>
+                </div>
+            `);
+            const kindSel = document.getElementById('commit-kind');
+            const sync = () => {
+                const curated = kindSel.value === 'curated';
+                document.getElementById('commit-curated').classList.toggle('hidden', !curated);
+                document.getElementById('commit-derived').classList.toggle('hidden', curated);
+            };
+            kindSel.addEventListener('change', sync);
+            sync();
+            document.getElementById('commit-go').addEventListener('click', () => runCommit(selections));
+        }
+
+        async function runCommit(selections) {
+            const kind = document.getElementById('commit-kind').value;
+            const body = {selections, kind};
+            if (kind === 'curated') {
+                body.tool = document.getElementById('commit-tool').value.trim();
+                body.method = document.getElementById('commit-method').value.trim();
+                if (!body.tool || !body.method) {
+                    document.getElementById('commit-result').innerHTML =
+                        '<span class="warn">Curated commits need both a tool and a method.</span>';
+                    return;
+                }
+            } else {
+                body.function = document.getElementById('commit-function').value.trim() || null;
+            }
+            const out = document.getElementById('commit-result');
+            out.textContent = 'Committing…';
+            const resp = await fetch(`${API}/provenance/stamp`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body),
+            }).then(r => r.json()).catch(err => ({error: String(err)}));
+            if (resp.error && !resp.count) {
+                out.innerHTML = `<span class="warn">Error: ${escapeHtml(resp.error)}</span>`;
+                return;
+            }
+            let msg = `Committed ${resp.count} artifact(s).`;
+            if ((resp.errors || []).length) msg += ` ${resp.errors.length} skipped.`;
+            out.textContent = msg;
+            // Clear the selection and refresh so the newly committed artifacts render.
+            selected.clear();
+            updateBackupButton();
+            updateCommitButton();
+            await loadAll();
         }
 
         // ---- Backup ---------------------------------------------------------

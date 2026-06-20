@@ -15,9 +15,10 @@ from eln.db.dump_db import dump
 from eln.sdgl import allocate_experiment_codes
 
 # Tracked, diffable data committed on publish. The binary experiments.db / sdgl.db
-# are build artifacts and stay gitignored in the data repo.
+# are build artifacts and stay gitignored in the data repo. ``curated/`` holds
+# hand-made artifacts copied in via the Commit flow — versioned like code.
 PUBLISH_PATHS = ["experiments.sql", "reports", "presentations", "thumbnails",
-                 "timestamps"]
+                 "timestamps", "curated"]
 
 # Reject any single staged file above this size so committing bulk media to git
 # stays sustainable (large data belongs in the backup flow, not git history).

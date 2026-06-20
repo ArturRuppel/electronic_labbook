@@ -16,6 +16,7 @@ Pages password gate) is served as a no-op so locally edited pages never prompt.
 """
 
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -309,6 +310,77 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     @app.route("/api/sdgl/scan/unmatched", methods=["GET"])
     def sdgl_scan_unmatched():
         return jsonify(get_sdgl().list_findings("unmatched"))
+
+    @app.route("/api/sdgl/provenance/stamp", methods=["POST"])
+    def sdgl_provenance_stamp():
+        """Commit the checkbox-selected files (same selection model as backup).
+
+        Treatment follows the content classification (see README):
+        - ``kind="curated"`` — hand-made, irreproducible artifacts are *versioned
+          like code*: the file is **copied into the data repo** under
+          ``curated/<EXPERIMENT-ID>/<path-relative-to-the-experiment>`` (only the
+          experiment-relative path is preserved, never the external absolute path),
+          then stamped (tool/method) so the committed copy carries its provenance.
+        - ``kind="derived"`` — automatic outputs stay on the filesystem and are
+          recorded by reference only (the existing stamp behaviour).
+
+        Body: {selections: [{node_id, rel_path}], kind, function?, params?,
+        notebook?, tool?, method?}. Returns {stamped: [rel_path...], errors:[...]}.
+        """
+        from eln.analysis import stamp
+        from eln.sdgl.backup import classify, resolve_logical_files
+
+        data = request.json or {}
+        selections = data.get("selections") or []
+        if not selections:
+            return jsonify({"error": "no selections"}), 400
+        kind = data.get("kind", "curated")
+        if kind not in ("derived", "curated"):
+            return jsonify({"error": f"bad kind: {kind}"}), 400
+        # Validate before any file is copied, so a bad request never leaves an
+        # orphan copy in the data repo.
+        if kind == "curated" and not (data.get("tool") and data.get("method")):
+            return jsonify({"error": "curated artifacts require both tool and method"}), 400
+
+        conn = get_sdgl().connect()
+        try:
+            logical = resolve_logical_files(conn, selections)
+        finally:
+            conn.close()
+        if not logical:
+            return jsonify({"error": "no files resolved from the selection"}), 400
+
+        stamped, errors = [], []
+        for (node_id, rel), copies in sorted(logical.items()):
+            result = classify(copies)
+            if result["status"] == "missing":
+                errors.append({"node_id": node_id, "rel_path": rel, "error": "no copy on disk"})
+                continue
+            chosen = result.get("chosen") or result["copies"][0]
+            try:
+                if kind == "curated":
+                    # Copy into the data repo, preserving only the path relative to
+                    # the experiment ID (the selection's rel_path already is that).
+                    exp_id = node_id.split(":", 1)[1]
+                    dest = Path(root) / "curated" / exp_id / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(chosen["path"], dest)
+                    stamp_path = dest
+                else:
+                    stamp_path = chosen["path"]
+                record = stamp(
+                    stamp_path, kind=kind, produced_by=node_id, root=root,
+                    function=data.get("function"), params=data.get("params"),
+                    notebook=data.get("notebook"),
+                    tool=data.get("tool"), method=data.get("method"),
+                )
+                stamped.append(record["path"])
+            except (ValueError, FileNotFoundError, OSError) as exc:
+                errors.append({"node_id": node_id, "rel_path": rel, "error": str(exc)})
+
+        status = 400 if errors and not stamped else 200
+        return jsonify({"stamped": stamped, "errors": errors,
+                        "count": len(stamped)}), status
 
     @app.route("/api/sdgl/backup/choose-folder", methods=["POST"])
     def sdgl_backup_choose_folder():
