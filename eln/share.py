@@ -49,3 +49,40 @@ def _strip_nav(html):
     """Remove the entire ``<div class="nav">…</div>`` block (single-item exports
     are standalone, with no catalog nav)."""
     return _NAV_BLOCK.sub("", html)
+
+
+_HTML_SUFFIXES = {".html", ".htm"}
+
+
+def _collect_assets(start_pages, root, dest, generated):
+    """Transitively copy every referenced in-tree file into ``dest``.
+
+    ``start_pages`` is a list of ``(base, html)`` where ``base`` is the page's
+    directory relative to ``root`` (``""`` for a flat-at-root page); refs resolve
+    against it. ``generated`` is the set of relpaths already produced by the
+    generators (sibling pages like ``experiments.html``) — referenced but neither
+    copied nor flagged missing. Recurses into any copied HTML so nested decks are
+    followed. Returns ``(seen, missing, total_bytes)``.
+    """
+    root, dest = Path(root), Path(dest)
+    seen = set(generated)
+    missing, total = [], 0
+    queue = list(start_pages)
+    while queue:
+        base, html = queue.pop()
+        for ref in _local_refs(html):
+            rel = os.path.normpath(os.path.join(base, ref)).replace(os.sep, "/")
+            if rel in seen or rel.startswith(".."):
+                continue
+            seen.add(rel)
+            src = root / rel
+            if src.is_file():
+                out = dest / rel
+                out.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, out)
+                total += src.stat().st_size
+                if src.suffix.lower() in _HTML_SUFFIXES:
+                    queue.append((os.path.dirname(rel), src.read_text(errors="ignore")))
+            elif not (dest / rel).exists():
+                missing.append(rel)
+    return seen, missing, total
