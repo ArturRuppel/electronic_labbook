@@ -16,11 +16,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import rfc3161ng
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
+from cryptography.x509.oid import ExtensionOID
+from pyasn1.codec.der.decoder import decode as _der_decode
+from pyasn1.codec.der.encoder import encode as _der_encode
+from pyasn1_modules import rfc5652
 
 from eln.hashing import sha256_hex
 
-DEFAULT_TSA_URL = "https://freetsa.org/tsr"
-DEFAULT_TSA_CERT = Path(__file__).parent / "certs" / "freetsa_cacert.pem"
+# DigiCert's public timestamping service: free, no auth, and RSA-signed (which
+# rfc3161ng can verify -- freeTSA migrated to an EC signing key that rfc3161ng
+# 2.1.3 cannot verify). The default trust anchor is DigiCert's self-signed
+# Trusted Root G4; the per-token signer cert is embedded in the token itself.
+DEFAULT_TSA_URL = "http://timestamp.digicert.com"
+DEFAULT_TSA_CERT = Path(__file__).parent / "certs" / "digicert_tsa_root.pem"
 TIMESTAMPS_DIR = "timestamps"
 
 # Paths whose contents a snapshot covers (mirrors publish.PUBLISH_PATHS; the
@@ -100,28 +110,87 @@ def update_index(root, ts_id, **changes):
 
 # ---- TSA request + token verify (rfc3161ng wrappers) ---------------------
 
-def request_timestamp(digest_hex, *, tsa_url, cert_bytes, timeout=10):
+def request_timestamp(digest_hex, *, tsa_url, cert_bytes=None, timeout=10):
     """Request a DER timestamp token for ``digest_hex`` from the TSA.
 
-    Raises on any network/TSA failure (the caller decides best-effort handling).
+    ``include_tsa_certificate`` makes the TSA embed its signer chain in the
+    token so verification is self-contained. Inline verification is skipped
+    (``certificate=None``); :func:`verify_token` verifies separately. Raises on
+    any network/TSA failure (the caller decides best-effort handling).
     """
     stamper = rfc3161ng.RemoteTimestamper(
-        tsa_url, certificate=cert_bytes, hashname="sha256", timeout=timeout)
+        tsa_url, certificate=None, hashname="sha256",
+        include_tsa_certificate=True, timeout=timeout)
     return stamper(digest=bytes.fromhex(digest_hex), return_tsr=False)
 
 
-def verify_token(token, digest_hex, cert_bytes):
-    """Verify a token's signature and that it covers ``digest_hex``.
+def _load_certs(pem_bytes):
+    """Load every PEM certificate in ``pem_bytes`` (the trusted roots)."""
+    return list(x509.load_pem_x509_certificates(pem_bytes)) if pem_bytes else []
 
-    Returns ``{"valid", "gen_time" (ISO str|None), "reason" (str|None)}``.
+
+def _embedded_certs(token):
+    """Return the x509 certs embedded in a timestamp token's SignedData."""
+    content_info, _ = _der_decode(token, asn1Spec=rfc5652.ContentInfo())
+    signed_data, _ = _der_decode(content_info["content"], asn1Spec=rfc5652.SignedData())
+    return [
+        x509.load_der_x509_certificate(_der_encode(signed_data["certificates"][i]["certificate"]))
+        for i in range(len(signed_data["certificates"]))
+    ]
+
+
+def _is_ca(cert):
+    try:
+        return cert.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS).value.ca
+    except x509.ExtensionNotFound:
+        return False
+
+
+def _leaf_cert(certs):
+    """The end-entity (non-CA) signer cert among the embedded certs."""
+    return next(c for c in certs if not _is_ca(c))
+
+
+def _chain_anchored(certs, roots):
+    """True when the leaf chains (by verified issuance) to a bundled root."""
+    if not roots:
+        return False
+    by_subject = {c.subject: c for c in certs if c.subject != c.issuer}
+    root_by_subject = {r.subject: r for r in roots}
+    node = _leaf_cert(certs)
+    for _ in range(10):  # bounded: real chains are short
+        if node.issuer in root_by_subject:
+            node.verify_directly_issued_by(root_by_subject[node.issuer])  # raises if bad
+            return True
+        issuer = by_subject.get(node.issuer)
+        if issuer is None or issuer is node:
+            return False
+        node.verify_directly_issued_by(issuer)
+        node = issuer
+    return False
+
+
+def verify_token(token, digest_hex, cert_bytes):
+    """Verify a token covers ``digest_hex`` and is signed by a trusted TSA.
+
+    Verifies the signature against the signer cert embedded in the token, then
+    confirms that signer chains to one of the bundled trusted roots in
+    ``cert_bytes``. Returns ``{"valid", "gen_time" (ISO str|None), "reason"}``.
     """
     try:
-        ok = rfc3161ng.check_timestamp(
-            token, certificate=cert_bytes,
+        certs = _embedded_certs(token)
+        leaf_der = _leaf_cert(certs).public_bytes(serialization.Encoding.DER)
+        sig_ok = rfc3161ng.check_timestamp(
+            token, certificate=leaf_der,
             digest=bytes.fromhex(digest_hex), hashname="sha256")
+        if not sig_ok:
+            return {"valid": False, "gen_time": None, "reason": "signature check failed"}
+        if not _chain_anchored(certs, _load_certs(cert_bytes)):
+            return {"valid": False, "gen_time": None,
+                    "reason": "signer not anchored to a trusted root"}
         gen = rfc3161ng.get_timestamp(token)
         gen_time = gen.isoformat() if gen is not None else None
-        return {"valid": bool(ok), "gen_time": gen_time, "reason": None}
+        return {"valid": True, "gen_time": gen_time, "reason": None}
     except Exception as exc:  # noqa: BLE001 - any failure means "not verifiable"
         return {"valid": False, "gen_time": None, "reason": str(exc)}
 

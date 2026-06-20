@@ -7,8 +7,18 @@ No live network or real crypto is exercised here.
 
 import hashlib
 from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
 
 from eln import timestamp
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+_SAMPLE_TSR = _FIXTURES / "digicert_sample.tsr"
+_SAMPLE_DIGEST = _FIXTURES / "digicert_sample.digest"
+_ROOT_PEM = Path(timestamp.DEFAULT_TSA_CERT)
+_needs_fixture = pytest.mark.skipif(
+    not _SAMPLE_TSR.exists(), reason="recorded DigiCert token fixture absent")
 
 
 def _write(root, rel, data):
@@ -87,9 +97,9 @@ def test_request_timestamp_passes_digest_and_returns_token(monkeypatch):
     calls = {}
 
     class FakeStamper:
-        def __init__(self, url, certificate=None, hashname=None, timeout=None):
+        def __init__(self, url, **kwargs):
             calls["url"] = url
-            calls["hashname"] = hashname
+            calls.update(kwargs)
 
         def __call__(self, digest=None, return_tsr=False):
             calls["digest"] = digest
@@ -101,28 +111,35 @@ def test_request_timestamp_passes_digest_and_returns_token(monkeypatch):
     assert token == b"TOKEN-BYTES"
     assert calls["url"] == "https://tsa.example/tsr"
     assert calls["hashname"] == "sha256"
+    assert calls["include_tsa_certificate"] is True
     assert calls["digest"] == bytes.fromhex("9f86d0")
 
 
-def test_verify_token_valid(monkeypatch):
-    monkeypatch.setattr(timestamp.rfc3161ng, "check_timestamp", lambda *a, **k: True)
-    monkeypatch.setattr(
-        timestamp.rfc3161ng, "get_timestamp",
-        lambda token: datetime(2026, 6, 20, tzinfo=timezone.utc))
-    out = timestamp.verify_token(b"TOK", "9f86d0", b"CERT")
+@_needs_fixture
+def test_verify_token_valid_against_fixture():
+    token = _SAMPLE_TSR.read_bytes()
+    digest = _SAMPLE_DIGEST.read_text().strip()
+    out = timestamp.verify_token(token, digest, _ROOT_PEM.read_bytes())
     assert out["valid"] is True
-    assert out["gen_time"].startswith("2026-06-20")
+    assert out["gen_time"] is not None
     assert out["reason"] is None
 
 
-def test_verify_token_invalid_on_exception(monkeypatch):
-    def boom(*a, **k):
-        raise ValueError("bad signature")
-
-    monkeypatch.setattr(timestamp.rfc3161ng, "check_timestamp", boom)
-    out = timestamp.verify_token(b"TOK", "9f86d0", b"CERT")
+@_needs_fixture
+def test_verify_token_invalid_on_tampered_digest():
+    token = _SAMPLE_TSR.read_bytes()
+    out = timestamp.verify_token(token, "b" * 64, _ROOT_PEM.read_bytes())
     assert out["valid"] is False
-    assert "bad signature" in out["reason"]
+    assert out["reason"]
+
+
+@_needs_fixture
+def test_verify_token_invalid_without_trusted_root():
+    token = _SAMPLE_TSR.read_bytes()
+    digest = _SAMPLE_DIGEST.read_text().strip()
+    out = timestamp.verify_token(token, digest, b"")  # no trusted roots
+    assert out["valid"] is False
+    assert "trusted root" in out["reason"]
 
 
 # ---- Task 4: create_timestamp + retry_pending ----------------------------
