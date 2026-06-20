@@ -1386,6 +1386,23 @@ class SDGL:
                 )
                 group["repetition_count"] = len(group["repetitions"])
                 group["aggregate"] = self._aggregate_for_code(conn, group["code"])
+                # A progress report declares a '**Series:** CODE' and is linked
+                # to every active repetition; surface it once at the series
+                # (parent) level rather than as an artifact under each position.
+                # Non-report links stay on their repetition.
+                series_reports = {}
+                for rep in group["repetitions"]:
+                    kept = []
+                    for link in rep["links"]:
+                        if link["type"] == "report":
+                            series_reports.setdefault(link["node_id"], link)
+                        else:
+                            kept.append(link)
+                    rep["links"] = kept
+                group["reports"] = sorted(
+                    series_reports.values(),
+                    key=lambda link: (link.get("title") or link["node_id"]).lower(),
+                )
                 experiments.append(group)
             experiments.sort(key=lambda group: (group["title"] or "").lower())
             return {"experiments": experiments}

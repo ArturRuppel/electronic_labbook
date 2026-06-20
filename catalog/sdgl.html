@@ -303,6 +303,9 @@
             row.dataset.search = `${exp.code} ${exp.title} ${(exp.tags || []).join(' ')}`.toLowerCase();
             row.addEventListener('click', () => select(`exp:${index}`, row, () => detailExperiment(exp)), true);
             const block = collapsible(row, (container) => {
+                // Series-level progress reports hang off the parent, once —
+                // not duplicated under each repetition.
+                (exp.reports || []).forEach((link, i) => container.appendChild(linkRow(link, `${index}.r${i}`)));
                 if (exp.aggregate) {
                     container.appendChild(aggregateBlock(exp, exp.aggregate, `${index}.agg`));
                 }
