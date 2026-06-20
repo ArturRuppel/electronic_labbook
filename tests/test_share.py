@@ -182,3 +182,15 @@ def test_export_all_refuses_dest_inside_root(data_root):
     with pytest.raises(ValueError):
         _assert_dest_outside_root(data_root / "reports" / "out", data_root)
     _assert_dest_outside_root(data_root.parent / "out", data_root)
+
+
+def test_generate_reports_only_one_file(data_root, tmp_path):
+    from eln.generators.reports import generate_reports
+    out_dir = tmp_path / "out"
+    path = generate_reports(data_root, catalog_out=out_dir,
+                            only="reports/weekly/tfm_progress.md",
+                            output_name="one.html")
+    assert path.name == "one.html"
+    html = path.read_text()
+    assert "TFM progress" in html        # the selected report
+    assert "Random notes" not in html    # the other report excluded

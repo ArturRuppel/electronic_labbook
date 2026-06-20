@@ -581,12 +581,15 @@ def extract_report_date(content, report_file):
     return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
 
 
-def generate_reports(root, catalog_out=None, plugins=None):
+def generate_reports(root, catalog_out=None, plugins=None, only=None,
+                     output_name="reports.html"):
     """Generate ``reports.html`` from markdown reports under *root*.
 
     *root* is the data-repo directory holding ``reports/``, ``experiments.db`` and
     the optional ``sdgl.db``. Output is written to *catalog_out* (default ``root/catalog``).
-    *plugins* (default: discovered) supply extra nav links.
+    *plugins* (default: discovered) supply extra nav links. *only* (a path relative
+    to *root*, e.g. ``reports/weekly/x.md``) restricts the page to a single report —
+    used by the static-bundle export — and *output_name* names the output file.
     """
     root = Path(root)
     reports_dir = root / "reports"
@@ -604,6 +607,10 @@ def generate_reports(root, catalog_out=None, plugins=None):
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
+
+    if only is not None:
+        only_path = (root / only).resolve()
+        report_files = [p for p in report_files if p.resolve() == only_path]
 
     if not report_files:
         reports_html = '<div class="no-reports">No reports available yet. Create markdown files in the reports/ directory.</div>'
@@ -691,7 +698,7 @@ def generate_reports(root, catalog_out=None, plugins=None):
 
     # Write to file
     catalog_dir.mkdir(parents=True, exist_ok=True)
-    output_file = catalog_dir / "reports.html"
+    output_file = catalog_dir / output_name
     output_file.write_text(html)
 
     print(f"Reports page generated at: {output_file}")
