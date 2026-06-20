@@ -38,6 +38,18 @@ def client(app_root):
     return app.test_client()
 
 
+# --- timestamps -------------------------------------------------------------
+
+def test_timestamp_verify_endpoint(client, monkeypatch):
+    from eln import timestamp
+    monkeypatch.setattr(timestamp, "verify_all",
+                        lambda root, cfg: {"timestamps": 1, "ok": 1, "invalid": [],
+                                           "pending": [], "live_anchored": True})
+    resp = client.get("/api/timestamp/verify")
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] == 1
+
+
 # --- experiments ------------------------------------------------------------
 
 def test_list_experiments_has_experiment_id(client):

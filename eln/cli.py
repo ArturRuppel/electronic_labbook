@@ -44,6 +44,7 @@ def cmd_admin(args):
         scan_roots=config.scan_roots,
         channel_aliases=config.channel_aliases,
         scanner=config.scanner,
+        timestamp=config.timestamp,
     )
     url = f"http://localhost:{args.port}/"
     print("=" * 50)
@@ -94,7 +95,33 @@ def cmd_verify(args):
         print(f"  CHANGED  {item['path']}")
     for item in result["missing"]:
         print(f"  MISSING  {item['path']}")
-    return 1 if (result["mismatch"] or result["missing"]) else 0
+
+    from eln import timestamp
+    cfg = timestamp.resolve_timestamp_config(config.timestamp)
+    ts = timestamp.verify_all(config.data_root, cfg)
+    print(f"  {ts['timestamps']} timestamp(s): {ts['ok']} ok, "
+          f"{len(ts['invalid'])} invalid, {len(ts['pending'])} pending; "
+          f"live snapshot {'anchored' if ts['live_anchored'] else 'NOT anchored'}")
+    for item in ts["invalid"]:
+        print(f"  INVALID  {item['id']}: {item['reason']}")
+    drift = bool(result["mismatch"] or result["missing"] or ts["invalid"])
+    return 1 if drift else 0
+
+
+def cmd_timestamp(args):
+    from eln import timestamp
+
+    config = _load(args)
+    cfg = timestamp.resolve_timestamp_config(config.timestamp)
+    if args.retry:
+        updated = timestamp.retry_pending(config.data_root, cfg)
+        print(f"  completed {len(updated)} pending timestamp(s)")
+        for entry in updated:
+            print(f"  OK  {entry['id']}")
+    else:
+        entry = timestamp.create_timestamp(config.data_root, cfg["paths"], cfg)
+        print(f"  {entry['status'].upper()}  {entry['id']}")
+    return 0
 
 
 def cmd_regenerate(args):
@@ -146,6 +173,7 @@ def cmd_backup(args):
         scan_roots=config.scan_roots,
         channel_aliases=config.channel_aliases,
         scanner=config.scanner,
+        timestamp=config.timestamp,
     )
     url = f"http://localhost:{args.port}/"
     print("=" * 50)
@@ -178,8 +206,14 @@ def build_parser():
                    help="store a SHA-256 per file (overrides [scanner].content_hashing)")
     p.set_defaults(func=cmd_scan)
 
-    p = sub.add_parser("verify", help="recompute file hashes and report any drift")
+    p = sub.add_parser("verify", help="recompute file hashes + verify timestamps")
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("timestamp",
+                       help="obtain an RFC 3161 trusted timestamp (or --retry pending)")
+    p.add_argument("--retry", action="store_true",
+                   help="re-request tokens for pending timestamps")
+    p.set_defaults(func=cmd_timestamp)
 
     p = sub.add_parser("regenerate", help="DB -> catalog HTML")
     p.add_argument("--catalog-out", default=None)

@@ -68,7 +68,7 @@ _AUTH_SCRIPT_RE = re.compile(r'<script\s+src=["\']auth\.js["\']\s*>\s*</script>'
 
 
 def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
-               scan_roots=None, channel_aliases=None, scanner=None):
+               scan_roots=None, channel_aliases=None, scanner=None, timestamp=None):
     """Build the Flask app bound to data-repo ``root``.
 
     ``scan_roots`` is the injected list of scan-root configs (from the unified
@@ -97,6 +97,7 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     content_hash, hash_max_bytes = hashing_options(scanner)
     app.config["CONTENT_HASHING"] = content_hash
     app.config["HASH_MAX_BYTES"] = hash_max_bytes
+    app.config["TIMESTAMP"] = timestamp or {}
     generated_pages = CORE_GENERATED_PAGES | {
         p.nav.href for p in plugins if p.nav and p.nav.href.endswith(".html")
     }
@@ -295,6 +296,14 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     def sdgl_verify_hashes():
         node_id = (request.json or {}).get("node_id")
         return jsonify(get_sdgl().verify_hashes(node_id))
+
+    @app.route("/api/timestamp/verify", methods=["GET"])
+    def timestamp_verify():
+        """Verify recorded RFC 3161 tokens and whether the live snapshot is
+        anchored (Roadmap step 11, layer 3)."""
+        from eln import timestamp as ts_mod
+        cfg = ts_mod.resolve_timestamp_config(app.config.get("TIMESTAMP"))
+        return jsonify(ts_mod.verify_all(root, cfg))
 
     @app.route("/api/sdgl/scan/unmatched", methods=["GET"])
     def sdgl_scan_unmatched():
