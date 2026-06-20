@@ -386,6 +386,52 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     def sdgl_backup_status():
         return jsonify(backup_job.snapshot())
 
+    # ==================== STATIC-BUNDLE EXPORT (step 12) ====================
+
+    @app.route("/api/export/preview", methods=["POST"])
+    def api_export_preview():
+        """Dry-run an export: report file count + total bytes + missing refs, and
+        whether the chosen dest already holds files (overwrite warning).
+
+        Renders into a throwaway temp dir so the count reflects the real walk; the
+        temp dir is discarded. Body: {mode: 'all'|'report'|'presentation', id?, dest?}."""
+        import tempfile
+        from eln.share import export_all, export_item
+        data = request.json or {}
+        mode = data.get("mode")
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                if mode == "all":
+                    result = export_all(root, tmp)
+                elif mode in ("report", "presentation"):
+                    result = export_item(root, tmp, mode, data.get("id", ""))
+                else:
+                    return jsonify({"error": f"bad mode: {mode}"}), 400
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+        dest = data.get("dest")
+        result["dest_nonempty"] = bool(dest) and Path(dest).is_dir() and any(Path(dest).iterdir())
+        return jsonify(result)
+
+    @app.route("/api/export/start", methods=["POST"])
+    def api_export_start():
+        """Write the bundle to the chosen dest. Body adds {dest: <abs path>}."""
+        from eln.share import export_all, export_item
+        data = request.json or {}
+        mode, dest = data.get("mode"), data.get("dest")
+        if not dest:
+            return jsonify({"error": "no destination chosen"}), 400
+        try:
+            if mode == "all":
+                result = export_all(root, dest)
+            elif mode in ("report", "presentation"):
+                result = export_item(root, dest, mode, data.get("id", ""))
+            else:
+                return jsonify({"error": f"bad mode: {mode}"}), 400
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify(result)
+
     # ==================== EXPERIMENTS ====================
 
     @app.route("/api/tags", methods=["GET"])

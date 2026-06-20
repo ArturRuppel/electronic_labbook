@@ -316,3 +316,39 @@ def test_presentations_html_is_a_generated_page(tmp_path):
     resp = client.get("/presentations.html")
     assert resp.status_code == 200
     assert b"P" in resp.data
+
+
+# --- export -----------------------------------------------------------------
+
+def test_api_export_start_all(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    db = root / "experiments.db"
+    init_db.init_db(db)
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO experiment_codes (title, code) VALUES ('Traction Force', 'TFMSP')")
+    conn.execute("INSERT INTO experiments (id, experiment_type, repetition, excluded, file_path) "
+                 "VALUES (1, 'Traction Force', 1, 0, 'x')")
+    conn.commit()
+    conn.close()
+    (root / "reports").mkdir()
+    client = create_app(root, scan_roots=[{"name": "data", "path": root / "data"}]).test_client()
+    dest = tmp_path / "exp_out"
+    resp = client.post("/api/export/start", json={"mode": "all", "dest": str(dest)})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["files"] >= 1
+    assert (dest / "index.html").is_file()
+
+
+def test_api_export_preview_reports_size(tmp_path):
+    root = tmp_path / "repo2"
+    root.mkdir()
+    db = root / "experiments.db"
+    init_db.init_db(db)
+    (root / "reports").mkdir()
+    client = create_app(root, scan_roots=[{"name": "data", "path": root / "data"}]).test_client()
+    resp = client.post("/api/export/preview", json={"mode": "all"})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert "files" in body and "bytes" in body and "dest_nonempty" in body
