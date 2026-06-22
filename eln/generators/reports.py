@@ -205,6 +205,13 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
         .report-header:hover {{
             background-color: #f3f6f8;
         }}
+        /* Single-report export: header is non-interactive, body always open. */
+        .report-header.standalone {{
+            cursor: default;
+        }}
+        .report-header.standalone:hover {{
+            background-color: transparent;
+        }}
         .report-title-row {{
             font-size: 1.15rem;
             font-weight: 650;
@@ -1037,6 +1044,25 @@ def _provenance_footer(artifacts):
             f'<ul>{items}</ul></div>')
 
 
+def discover_report_files(reports_dir, suffixes=(".md", ".ipynb")):
+    """Return report files under *reports_dir* (recursively), newest first.
+
+    Reports are organised one folder per report, so the search recurses.
+    ``README.md`` is the folder's own documentation, not a report, so it is
+    always skipped. This is the single definition of "what counts as a report";
+    both the page generator and the admin server use it so the two never drift.
+    """
+    reports_dir = Path(reports_dir)
+    if not reports_dir.exists():
+        return []
+    return sorted(
+        (p for p in reports_dir.glob("**/*")
+         if p.suffix in suffixes and p.name.lower() != "readme.md"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+
 def generate_reports(root, catalog_out=None, plugins=None, only=None,
                      output_name="reports.html"):
     """Generate ``reports.html`` from markdown reports under *root*.
@@ -1057,13 +1083,7 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
         reports_dir.mkdir(parents=True)
 
     # Reports are markdown or notebook files under reports/ (recursively).
-    # README.md is the folder's own documentation, not a report — skip it.
-    report_files = sorted(
-        (p for p in reports_dir.glob("**/*")
-         if p.suffix in (".md", ".ipynb") and p.name.lower() != "readme.md"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
+    report_files = discover_report_files(reports_dir)
 
     if only is not None:
         only_path = (root / only).resolve()
@@ -1081,6 +1101,10 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
         if sdgl_db_path.exists():
             sdgl_conn = sqlite3.connect(sdgl_db_path)
             sdgl_conn.row_factory = sqlite3.Row
+
+        # A single-report export (``only`` set) renders the report expanded with a
+        # plain, non-collapsible header — there's nothing to collapse it against.
+        standalone = only is not None
 
         provenance = report_provenance(root)
         reports_html_list = []
@@ -1164,16 +1188,21 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
                 toggle = ""
                 code_pane = ""
 
+            header_cls = "report-header standalone" if standalone else "report-header"
+            header_onclick = "" if standalone else f" onclick=\"toggleReport('{slug}')\""
+            expand_icon = "" if standalone else (
+                f'<span class="expand-icon" id="icon-{slug}">&#9658;</span>\n                            ')
+            details_style = ' style="display: block;"' if standalone else ""
+
             reports_html_list.append(f"""
                 <div class="report-card" id="report-{slug}" data-report-src="{rel_src}">
-                    <div class="report-header" onclick="toggleReport('{slug}')">
+                    <div class="{header_cls}"{header_onclick}>
                         <div class="report-title-row">
-                            <span class="expand-icon" id="icon-{slug}">&#9658;</span>
-                            {title}
+                            {expand_icon}{title}
                         </div>
                         <div class="report-date">{report_date}</div>
                     </div>
-                    <div class="report-details" id="details-{slug}">{toggle}
+                    <div class="report-details" id="details-{slug}"{details_style}>{toggle}
                         <div class="report-view" id="view-{slug}">
                             <div class="report-content">
                                 {html_content}

@@ -195,6 +195,97 @@ def test_protocols_and_reports_crud(client):
     assert client.post("/api/reports", json={"filename": "x.txt"}).status_code == 400
 
 
+def test_list_reports_recurses_and_skips_readme(app_root):
+    """Reports live one-folder-each, so listing recurses and keys by relative
+    path; README.md is the folder's own docs, not a report."""
+    root, app = app_root
+    client = app.test_client()
+    reports = root / "reports"
+    (reports / "2026-02_Foo").mkdir()
+    (reports / "2026-02_Foo" / "2026-02_Foo.md").write_text("# Foo", encoding="utf-8")
+    (reports / "README.md").write_text("# folder docs", encoding="utf-8")
+
+    listed = {r["filename"] for r in client.get("/api/reports").get_json()}
+    assert "2026-02_Foo/2026-02_Foo.md" in listed
+    assert "README.md" not in listed
+
+    # The nested report is reachable by its relative path for GET/PUT/DELETE.
+    assert client.get("/api/reports/2026-02_Foo/2026-02_Foo.md").get_json()["content"] == "# Foo"
+    assert client.put(
+        "/api/reports/2026-02_Foo/2026-02_Foo.md", json={"content": "# Bar"}
+    ).status_code == 200
+    assert client.get("/api/reports/2026-02_Foo/2026-02_Foo.md").get_json()["content"] == "# Bar"
+
+
+def test_report_path_traversal_is_refused(client):
+    """A report identifier may not escape reports/ via ``..``."""
+    assert client.get("/api/reports/../experiments.db").status_code == 404
+
+
+def _write_notebook(path):
+    """A notebook with markdown (0), code+output (1), markdown (2)."""
+    import nbformat
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_markdown_cell("# Title\n\n**Series:** TFMSP"),
+        nbformat.v4.new_code_cell(
+            "print('hi')",
+            outputs=[nbformat.v4.new_output("stream", name="stdout", text="hi\n")],
+        ),
+        nbformat.v4.new_markdown_cell("## Results\n\nProse here."),
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    nbformat.write(nb, str(path))
+
+
+def test_notebook_report_lists_and_exposes_only_markdown_cells(app_root):
+    root, app = app_root
+    client = app.test_client()
+    _write_notebook(root / "reports" / "nb" / "nb.ipynb")
+
+    listed = {r["filename"]: r["type"] for r in client.get("/api/reports").get_json()}
+    assert listed.get("nb/nb.ipynb") == "notebook"
+
+    got = client.get("/api/reports/nb/nb.ipynb").get_json()
+    assert got["type"] == "notebook"
+    # Only the two markdown cells are exposed, at their full-list indices 0 and 2.
+    assert [c["index"] for c in got["cells"]] == [0, 2]
+    assert got["cells"][0]["source"].startswith("# Title")
+
+
+def test_notebook_edit_preserves_code_and_outputs(app_root):
+    import nbformat
+    root, app = app_root
+    client = app.test_client()
+    nb_path = root / "reports" / "nb" / "nb.ipynb"
+    _write_notebook(nb_path)
+
+    resp = client.put(
+        "/api/reports/nb/nb.ipynb",
+        json={"cells": [{"index": 0, "source": "# Edited title"}]},
+    )
+    assert resp.status_code == 200
+
+    nb = nbformat.read(str(nb_path), as_version=4)
+    assert nb.cells[0].source == "# Edited title"      # markdown edit applied
+    assert nb.cells[1].cell_type == "code"             # code cell untouched
+    assert nb.cells[1].source == "print('hi')"
+    assert nb.cells[1].outputs[0].text == "hi\n"       # output preserved
+    assert nb.cells[2].source == "## Results\n\nProse here."
+
+
+def test_notebook_edit_rejects_non_markdown_cell_index(app_root):
+    root, app = app_root
+    client = app.test_client()
+    _write_notebook(root / "reports" / "nb" / "nb.ipynb")
+    # Cell 1 is a code cell; editing it through the text editor is refused.
+    resp = client.put(
+        "/api/reports/nb/nb.ipynb",
+        json={"cells": [{"index": 1, "source": "malicious"}]},
+    )
+    assert resp.status_code == 400
+
+
 # --- HTML serving + overlay -------------------------------------------------
 
 def test_index_serves_sdgl_with_overlay(client):

@@ -23,11 +23,13 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+import nbformat
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from eln.channels import build_alias_map, canonical_channel
 from eln.generators import generate_all
+from eln.generators.reports import discover_report_files
 from eln.plugins import discover_plugins, effective_scan_roots
 from eln.sdgl import (
     SDGL,
@@ -65,6 +67,35 @@ OVERLAY_SNIPPET = '''
 '''
 
 _AUTH_SCRIPT_RE = re.compile(r'<script\s+src=["\']auth\.js["\']\s*>\s*</script>')
+
+
+def _read_notebook_markdown_cells(path):
+    """Return ``[{index, source}, …]`` for the markdown cells of the notebook
+    at *path*. The index is the cell's position in the full cell list, so it
+    round-trips unambiguously through :func:`_apply_markdown_cell_edits`."""
+    nb = nbformat.read(str(path), as_version=4)
+    return [
+        {"index": i, "source": cell.source}
+        for i, cell in enumerate(nb.cells)
+        if cell.cell_type == "markdown"
+    ]
+
+
+def _apply_markdown_cell_edits(path, edits):
+    """Overwrite the source of the markdown cells named in *edits* (a list of
+    ``{index, source}``) in the notebook at *path*, leaving code cells and all
+    outputs untouched, then write it back. nbformat canonicalises formatting so
+    unedited cells round-trip without churn. Raises ValueError if an index is
+    out of range or does not point at a markdown cell."""
+    nb = nbformat.read(str(path), as_version=4)
+    for edit in edits:
+        idx = edit.get("index")
+        if not isinstance(idx, int) or idx < 0 or idx >= len(nb.cells):
+            raise ValueError(f"cell index out of range: {idx!r}")
+        if nb.cells[idx].cell_type != "markdown":
+            raise ValueError(f"cell {idx} is not a markdown cell")
+        nb.cells[idx].source = edit.get("source", "")
+    nbformat.write(nb, str(path))
 
 
 def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
@@ -837,15 +868,31 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
 
     # ==================== PROGRESS REPORTS ====================
 
+    def _resolve_report_path(filename):
+        """Resolve a report identifier (a path relative to reports/, e.g.
+        ``foo/foo.md``) to an absolute path, refusing anything that escapes
+        reports/ via ``..`` or an absolute path. Returns None if unsafe."""
+        candidate = (reports_path / filename).resolve()
+        root = reports_path.resolve()
+        if candidate != root and root not in candidate.parents:
+            return None
+        return candidate
+
     @app.route("/api/reports", methods=["GET"])
     def list_reports():
         reports_path.mkdir(exist_ok=True)
+        # Reports are organised one folder per report, so discovery recurses and
+        # the identifier is the path relative to reports/ (not just the basename),
+        # which is what the GET/PUT/DELETE routes below expect. Notebooks are
+        # listed too: their markdown (text) cells are editable in the admin panel,
+        # while code cells and outputs stay read-only.
         reports = []
-        for report_file in reports_path.glob("*.md"):
+        for report_file in discover_report_files(reports_path, suffixes=(".md", ".ipynb")):
             stat = report_file.stat()
             reports.append(
                 {
-                    "filename": report_file.name,
+                    "filename": report_file.relative_to(reports_path).as_posix(),
+                    "type": "notebook" if report_file.suffix == ".ipynb" else "markdown",
                     "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     "size": stat.st_size,
                 }
@@ -853,14 +900,22 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         reports.sort(key=lambda x: x["modified"], reverse=True)
         return jsonify(reports)
 
-    @app.route("/api/reports/<filename>", methods=["GET"])
+    @app.route("/api/reports/<path:filename>", methods=["GET"])
     def get_report(filename):
-        report_path = reports_path / filename
-        if not report_path.exists() or not report_path.is_file():
+        report_path = _resolve_report_path(filename)
+        if report_path is None or not report_path.exists() or not report_path.is_file():
             return jsonify({"error": "Report not found"}), 404
+        # A notebook returns its markdown cells (text only) for per-cell editing;
+        # code cells and outputs are never sent and stay untouched on save.
+        if report_path.suffix == ".ipynb":
+            try:
+                cells = _read_notebook_markdown_cells(report_path)
+            except Exception as e:  # noqa: BLE001 - malformed notebook → 400 to the UI
+                return jsonify({"error": f"Could not read notebook: {e}"}), 400
+            return jsonify({"filename": filename, "type": "notebook", "cells": cells})
         try:
             content = report_path.read_text(encoding="utf-8")
-            return jsonify({"filename": filename, "content": content})
+            return jsonify({"filename": filename, "type": "markdown", "content": content})
         except OSError as e:
             return jsonify({"error": str(e)}), 500
 
@@ -871,32 +926,44 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         content = data.get("content", "")
         if not filename or not filename.endswith(".md"):
             return jsonify({"error": "Invalid filename (must end with .md)"}), 400
-        report_path = reports_path / filename
+        report_path = _resolve_report_path(filename)
+        if report_path is None:
+            return jsonify({"error": "Invalid filename"}), 400
         if report_path.exists():
             return jsonify({"error": "Report already exists"}), 400
         try:
-            reports_path.mkdir(exist_ok=True)
+            report_path.parent.mkdir(parents=True, exist_ok=True)
             report_path.write_text(content, encoding="utf-8")
             return jsonify({"success": True, "message": "Report created", "filename": filename})
         except OSError as e:
             return jsonify({"error": str(e)}), 500
 
-    @app.route("/api/reports/<filename>", methods=["PUT"])
+    @app.route("/api/reports/<path:filename>", methods=["PUT"])
     def update_report(filename):
-        data = request.json
-        report_path = reports_path / filename
-        if not report_path.exists():
+        data = request.json or {}
+        report_path = _resolve_report_path(filename)
+        if report_path is None or not report_path.exists():
             return jsonify({"error": "Report not found"}), 404
+        # Notebook edits carry only the changed markdown cells ({index, source});
+        # apply them in place so code cells and outputs are preserved verbatim.
+        if report_path.suffix == ".ipynb":
+            try:
+                _apply_markdown_cell_edits(report_path, data.get("cells", []))
+            except ValueError as e:
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:  # noqa: BLE001 - malformed notebook → surface to UI
+                return jsonify({"error": f"Could not write notebook: {e}"}), 500
+            return jsonify({"success": True, "message": "Report updated"})
         try:
             report_path.write_text(data.get("content", ""), encoding="utf-8")
             return jsonify({"success": True, "message": "Report updated"})
         except OSError as e:
             return jsonify({"error": str(e)}), 500
 
-    @app.route("/api/reports/<filename>", methods=["DELETE"])
+    @app.route("/api/reports/<path:filename>", methods=["DELETE"])
     def delete_report(filename):
-        report_path = reports_path / filename
-        if not report_path.exists():
+        report_path = _resolve_report_path(filename)
+        if report_path is None or not report_path.exists():
             return jsonify({"error": "Report not found"}), 404
         try:
             report_path.unlink()

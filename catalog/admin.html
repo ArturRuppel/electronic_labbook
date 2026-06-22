@@ -806,9 +806,17 @@
                             <small style="color: #666; margin-top: 0.25rem;">Must end with .md</small>
                         </div>
 
-                        <div class="form-group full-width">
+                        <div class="form-group full-width" id="report-content-group">
                             <label for="report-content">Report Content (Markdown) *</label>
-                            <textarea id="report-content" class="large" required placeholder="# Progress Report&#10;&#10;**Date:** 2025-10-26&#10;**Author:** Your Name&#10;&#10;## Summary&#10;&#10;This week's progress..."></textarea>
+                            <textarea id="report-content" class="large" required placeholder="# Progress Report&#10;&#10;**Date:** 2025-10-26&#10;&#10;**Author:** Your Name&#10;&#10;## Summary&#10;&#10;This week's progress..."></textarea>
+                        </div>
+
+                        <!-- Notebook reports edit their markdown cells per-cell; code
+                             cells and outputs are not shown and stay untouched on save. -->
+                        <div class="form-group full-width hidden" id="report-notebook-group">
+                            <label>Notebook Text Cells</label>
+                            <small style="color: #666; margin-bottom: 0.5rem; display: block;">Editing the markdown cells of a notebook report. Code cells and their outputs are not shown and will not be changed.</small>
+                            <div id="report-notebook-cells"></div>
                         </div>
                     </div>
 

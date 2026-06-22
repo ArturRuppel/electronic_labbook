@@ -40,15 +40,17 @@ function handleDeepLink() {
     } else if (editType === 'report' && editName) {
         const tabBtn = document.querySelector('.tab:nth-child(3)');
         if (tabBtn) switchTab('reports', tabBtn);
-        // Find the report by matching the name in the list
+        // Match the requested report by filename; the list is keyed by filename.
         const items = document.querySelectorAll('#reports-list .list-item');
+        let matched = false;
         items.forEach(item => {
             const title = item.querySelector('.list-item-title');
-            if (title) {
-                const filename = title.textContent.trim();
-                editReport(filename);
+            if (title && title.textContent.trim() === editName) {
+                editReport(editName);
+                matched = true;
             }
         });
+        if (!matched) showAlert('Report not found: ' + editName, 'error');
     }
 }
 
@@ -887,10 +889,12 @@ function createReportListItem(report) {
     div.className = 'list-item';
 
     const date = new Date(report.modified).toLocaleString();
+    const typeLabel = report.type === 'notebook' ? 'Notebook (text cells editable)' : 'Markdown';
 
     div.innerHTML = `
         <div class="list-item-content">
             <div class="list-item-title">${report.filename}</div>
+            <div class="list-item-meta">${typeLabel}</div>
             <div class="list-item-meta">Last modified: ${date}</div>
             <div class="list-item-meta">Size: ${(report.size / 1024).toFixed(2)} KB</div>
         </div>
@@ -903,14 +907,60 @@ function createReportListItem(report) {
     return div;
 }
 
+// Switch the report form between markdown mode (single textarea) and notebook
+// mode (one textarea per markdown cell). A hidden `required` textarea blocks
+// native form submission, so the inactive mode's field has `required` cleared.
+function setReportFormMode(mode, cells) {
+    const contentGroup = document.getElementById('report-content-group');
+    const contentArea = document.getElementById('report-content');
+    const nbGroup = document.getElementById('report-notebook-group');
+    const nbCells = document.getElementById('report-notebook-cells');
+
+    if (mode === 'notebook') {
+        contentGroup.classList.add('hidden');
+        contentArea.required = false;
+        nbGroup.classList.remove('hidden');
+        nbCells.innerHTML = '';
+        (cells || []).forEach(cell => {
+            const wrap = document.createElement('div');
+            wrap.className = 'form-group';
+            wrap.style.marginBottom = '1rem';
+            const label = document.createElement('label');
+            label.textContent = 'Cell ' + cell.index;
+            const ta = document.createElement('textarea');
+            ta.className = 'large';
+            ta.dataset.cellIndex = cell.index;
+            ta.value = cell.source;
+            wrap.appendChild(label);
+            wrap.appendChild(ta);
+            nbCells.appendChild(wrap);
+        });
+    } else {
+        nbGroup.classList.add('hidden');
+        nbCells.innerHTML = '';
+        contentGroup.classList.remove('hidden');
+        contentArea.required = true;
+    }
+}
+
 async function editReport(filename) {
     try {
         const response = await fetch(`${API_BASE_URL}/reports/${filename}`);
         const report = await response.json();
+        if (!response.ok) {
+            showAlert('Error loading report: ' + (report.error || 'request failed'), 'error');
+            return;
+        }
 
         document.getElementById('report-filename').value = report.filename;
         document.getElementById('report-filename').readOnly = true;
-        document.getElementById('report-content').value = report.content;
+
+        if (report.type === 'notebook') {
+            setReportFormMode('notebook', report.cells);
+        } else {
+            setReportFormMode('markdown');
+            document.getElementById('report-content').value = report.content;
+        }
 
         // Switch to reports tab
         switchTab('reports');
@@ -948,6 +998,7 @@ async function deleteReport(filename) {
 function resetReportForm() {
     document.getElementById('report-form').reset();
     document.getElementById('report-filename').readOnly = false;
+    setReportFormMode('markdown');
 }
 
 // Handle report form submission
@@ -958,29 +1009,39 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
 
             const filename = document.getElementById('report-filename').value;
-            const content = document.getElementById('report-content').value;
             const isEdit = document.getElementById('report-filename').readOnly;
+            const isNotebook = !document.getElementById('report-notebook-group')
+                .classList.contains('hidden');
 
-            if (!filename.endsWith('.md')) {
+            // Notebooks are only ever edited (PUT) — never created here — so the
+            // .md filename rule applies only to markdown reports.
+            if (!isNotebook && !filename.endsWith('.md')) {
                 showAlert('Filename must end with .md', 'error');
                 return;
             }
 
-            const data = {
-                filename,
-                content
-            };
-
-            try {
-                const url = isEdit
+            let url, method, body;
+            if (isNotebook) {
+                const cells = Array.from(
+                    document.querySelectorAll('#report-notebook-cells textarea')
+                ).map(ta => ({index: parseInt(ta.dataset.cellIndex, 10), source: ta.value}));
+                url = `${API_BASE_URL}/reports/${filename}`;
+                method = 'PUT';
+                body = JSON.stringify({cells});
+            } else {
+                const content = document.getElementById('report-content').value;
+                url = isEdit
                     ? `${API_BASE_URL}/reports/${filename}`
                     : `${API_BASE_URL}/reports`;
-                const method = isEdit ? 'PUT' : 'POST';
+                method = isEdit ? 'PUT' : 'POST';
+                body = JSON.stringify({filename, content});
+            }
 
+            try {
                 const response = await fetch(url, {
                     method,
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
+                    body
                 });
 
                 const result = await response.json();

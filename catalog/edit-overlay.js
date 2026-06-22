@@ -173,17 +173,20 @@
         // Add Edit button to each report card
         var cards = document.querySelectorAll('.report-card');
         cards.forEach(function(card) {
-            // Extract filename from the report title (h1)
-            var h1 = card.querySelector('.report-content h1');
-            if (!h1) return;
-            var a = document.createElement('a');
-            a.className = 'eln-edit-btn';
-            a.href = '/admin.html?edit=report&name=' + encodeURIComponent(h1.textContent.trim());
-            a.textContent = 'Edit';
-            a.style.float = 'right';
-            card.insertBefore(a, card.firstChild);
-
             var src = card.getAttribute('data-report-src');
+            // The admin list and edit API key reports by their path relative to
+            // reports/ (e.g. "foo/foo.md"), since reports live one-folder-each.
+            // data-report-src is "reports/<relpath>", so strip that one prefix.
+            var filename = src ? src.replace(/^reports\//, '') : null;
+            if (filename) {
+                var a = document.createElement('a');
+                a.className = 'eln-edit-btn';
+                a.href = '/admin.html?edit=report&name=' + encodeURIComponent(filename);
+                a.textContent = 'Edit';
+                a.style.float = 'right';
+                card.insertBefore(a, card.firstChild);
+            }
+
             if (src) {
                 var ex = document.createElement('a');
                 ex.className = 'eln-edit-btn';
