@@ -239,6 +239,20 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
             border: 1px solid #d7dde2;
             border-radius: 8px;
         }}
+        .report-provenance {{ margin-top: 1rem; padding-top: 0.75rem;
+                              border-top: 1px solid #e0e5e9; font-size: 0.85rem;
+                              color: #53616d; }}
+        .report-provenance h4 {{ font-size: 0.8rem; text-transform: uppercase;
+                                 color: #6a7884; margin-bottom: 0.4rem; }}
+        .report-provenance li {{ list-style: none; }}
+        .report-stale {{ background: #fbeede; color: #8a5a1f;
+                         border: 1px solid #eccf9c; border-radius: 6px;
+                         padding: 0.4rem 0.7rem; margin-bottom: 0.6rem; }}
+        .prov-status {{ font-family: monospace; }}
+        .prov-ok {{ color: #27735f; }}
+        .prov-stale {{ color: #8a5a1f; }}
+        .prov-modified {{ color: #8a6d1f; }}
+        .prov-missing {{ color: #8a3b3b; }}
         .exp-overview {{
             margin: 1.5rem 0;
             padding: 1rem 1.25rem;
@@ -713,6 +727,72 @@ def notebook_markdown(nb):
     return "\n\n".join(parts)
 
 
+def report_provenance(root):
+    """Map each report's path to its produced artifacts and their status, from the
+    SDGL ``generates`` stamps. Keyed by the stamp's recorded ``notebook.path``
+    (e.g. ``reports/cov2d/report.ipynb``); each value is a sorted list of
+    ``{"path", "status"}`` with ``status`` in ``ok`` / ``stale`` / ``modified`` /
+    ``missing``. Empty when ``sdgl.db`` is absent, so the page renders without it.
+
+    One pass over the graph: a single ``generates`` query plus one
+    ``verify_provenance`` and one ``stale_outputs`` for the whole repo."""
+    root = Path(root)
+    sdgl_db = root / DEFAULT_SDGL_DB_NAME
+    if not sdgl_db.exists():
+        return {}
+
+    from eln.analysis.provenance import stale_outputs, verify_provenance
+    from eln.sdgl.engine import json_loads
+
+    conn = sqlite3.connect(str(sdgl_db))
+    conn.row_factory = sqlite3.Row
+    try:
+        try:
+            rows = conn.execute(
+                "SELECT target_id, metadata FROM edges "
+                "WHERE relation_type = 'generates'"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return {}
+    finally:
+        conn.close()
+
+    drift = {d["node_id"]: d["status"] for d in verify_provenance(root)}
+    stale = {d["node_id"]: d["status"] for d in stale_outputs(root)}
+    by_report = {}
+    for row in rows:
+        meta = json_loads(row["metadata"]) or {}
+        nb_path = (meta.get("notebook") or {}).get("path")
+        if not nb_path:
+            continue
+        node = row["target_id"]
+        path = node[len("dataset:"):] if node.startswith("dataset:") else node
+        status = drift.get(node) or stale.get(node) or "ok"
+        by_report.setdefault(nb_path, []).append({"path": path, "status": status})
+    for items in by_report.values():
+        items.sort(key=lambda a: a["path"])
+    return by_report
+
+
+def _provenance_footer(artifacts):
+    """Footer HTML for a report card: a staleness banner (when any artifact is
+    stale/modified/missing) and the list of produced artifacts. '' when none."""
+    if not artifacts:
+        return ""
+    bad = [a for a in artifacts if a["status"] != "ok"]
+    banner = ""
+    if bad:
+        kinds = sorted({a["status"] for a in bad})
+        banner = (f'<div class="report-stale">&#9888; figures {", ".join(kinds)} '
+                  "&mdash; re-run the notebook</div>")
+    items = "".join(
+        f'<li><span class="prov-status prov-{a["status"]}">[{a["status"]}]</span> '
+        f'{a["path"]}</li>' for a in artifacts)
+    return (f'<div class="report-provenance">{banner}'
+            f'<h4>How this was made &middot; artifacts produced</h4>'
+            f'<ul>{items}</ul></div>')
+
+
 def generate_reports(root, catalog_out=None, plugins=None, only=None,
                      output_name="reports.html"):
     """Generate ``reports.html`` from markdown reports under *root*.
@@ -758,6 +838,7 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
             sdgl_conn = sqlite3.connect(sdgl_db_path)
             sdgl_conn.row_factory = sqlite3.Row
 
+        provenance = report_provenance(root)
         reports_html_list = []
         for report_file in report_files:
             if report_file.suffix == ".ipynb":
@@ -815,6 +896,7 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
             report_date = extract_report_date(content, report_file)
 
             rel_src = report_file.relative_to(root).as_posix()
+            footer = _provenance_footer(provenance.get(rel_src, []))
             reports_html_list.append(f"""
                 <div class="report-card" id="report-{slug}" data-report-src="{rel_src}">
                     <div class="report-header" onclick="toggleReport('{slug}')">
@@ -828,6 +910,7 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
                         <div class="report-content">
                             {html_content}
                         </div>
+                        {footer}
                     </div>
                 </div>
             """)
