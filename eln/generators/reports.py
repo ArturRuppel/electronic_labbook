@@ -694,6 +694,24 @@ def generate_series_reports(root):
     return written
 
 
+def notebook_markdown(nb):
+    """Concatenated source of a notebook's **markdown cells**, blank-line joined.
+
+    Code cells and all cell outputs are dropped entirely — a notebook report is
+    rendered as prose + embedded figures, never as code. The returned text is fed
+    through the same markdown pipeline as a .md report (so ``**Series:**``,
+    ``{{experiments}}``, ``**Date:**`` and relative-image rewriting all apply)."""
+    parts = []
+    for cell in nb.get("cells", []):
+        if cell.get("cell_type") != "markdown":
+            continue
+        source = cell.get("source", [])
+        if isinstance(source, list):
+            source = "".join(source)
+        parts.append(source)
+    return "\n\n".join(parts)
+
+
 def generate_reports(root, catalog_out=None, plugins=None, only=None,
                      output_name="reports.html"):
     """Generate ``reports.html`` from markdown reports under *root*.
