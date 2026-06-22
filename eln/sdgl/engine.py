@@ -203,6 +203,34 @@ def _is_hidden(name):
     return name.startswith(".")
 
 
+def _notebook_markdown(nb):
+    """Concatenated source of a notebook's markdown cells (code/outputs dropped).
+
+    Mirrors ``eln.generators.reports.notebook_markdown`` so a notebook report is
+    indexed from the same prose the page renders, without importing the generators
+    package into the scanner (which would invert the sdgl->generators dependency)."""
+    parts = []
+    for cell in nb.get("cells", []):
+        if cell.get("cell_type") != "markdown":
+            continue
+        source = cell.get("source", [])
+        if isinstance(source, list):
+            source = "".join(source)
+        parts.append(source)
+    return "\n\n".join(parts)
+
+
+def _report_text(path):
+    """Markdown text of a report file (``.md`` verbatim, ``.ipynb`` -> markdown
+    cells), or None for a malformed notebook the scan should skip."""
+    if path.suffix == ".ipynb":
+        try:
+            return _notebook_markdown(json.loads(path.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, OSError):
+            return None
+    return path.read_text(encoding="utf-8")
+
+
 def derive_code(title, used):
     """Derive a unique 5-character [A-Z0-9]{5} code from a title, avoiding `used`.
 
@@ -566,7 +594,11 @@ class SDGL:
             eln.close()
 
     def _sync_reports(self, eln, conn, id_by_experiment):
-        """Scan reports/*.md files, populate the reports table, and create SDGL nodes/edges.
+        """Scan report files, populate the reports table, and create SDGL nodes/edges.
+
+        Reports are markdown or notebooks under ``reports/`` (recursively).
+        ``README.md`` is the folder's own documentation, not a report, and is
+        skipped here exactly as the page generator skips it.
 
         Args:
             eln: ELN database connection.
@@ -582,10 +614,13 @@ class SDGL:
         # explicitly via '**Series:** CODE' and linked as 'has_report' below.
         conn.execute("DELETE FROM edges WHERE relation_type = 'documents'")
 
-        # Collect all report files
+        # Collect all report files (markdown + notebooks), skipping README.md and
+        # anything under a hidden path.
         report_files = sorted(
-            p for p in reports_dir.glob("**/*.md")
-            if not any(_is_hidden(part) for part in p.relative_to(reports_dir).parts)
+            p for p in reports_dir.glob("**/*")
+            if p.suffix in (".md", ".ipynb")
+            and p.name.lower() != "readme.md"
+            and not any(_is_hidden(part) for part in p.relative_to(reports_dir).parts)
         )
 
         # Track which reports exist for pruning
@@ -593,17 +628,25 @@ class SDGL:
 
         for report_file in report_files:
             rel_path = str(report_file.relative_to(self.root_path))
+
+            # Markdown source (.ipynb -> its markdown cells). A malformed notebook
+            # yields None: leave any prior row in place (don't prune a file that
+            # exists) but skip re-indexing it this pass.
+            content = _report_text(report_file)
+            if content is None:
+                seen_report_paths.add(rel_path)
+                continue
             seen_report_paths.add(rel_path)
 
-            # Extract title from markdown frontmatter or filename
-            content = report_file.read_text(encoding="utf-8")
+            # Extract title from the markdown H1 or fall back to the filename
             title_match = re.match(r'^#\s+(.+)$', content, re.MULTILINE)
             title = title_match.group(1).strip() if title_match else report_file.stem.replace('_', ' ').replace('-', ' ').title()
 
             # Extract the declared series if present (e.g., "**Series:** NESFM").
             # This single declaration is the canonical coverage signal, shared with
-            # the report-overview block in generate_reports.py.
-            series_match = re.search(r'\*\*Series:\*\*\s*([A-Z]{5})', content)
+            # the report-overview block in generate_reports.py. Codes are
+            # alphanumeric (COV2D has a digit), so match CODE_RE's grammar.
+            series_match = re.search(r'\*\*Series:\*\*\s*([A-Z0-9]{5})', content)
             report_series = series_match.group(1) if series_match else None
 
             # Insert or update report in ELN

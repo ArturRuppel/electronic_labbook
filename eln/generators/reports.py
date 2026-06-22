@@ -795,12 +795,24 @@ def generate_series_reports(root):
         sdgl_conn.row_factory = sqlite3.Row
 
     # Series already claimed by a hand-authored report (declared outside auto/).
+    # Reports may be markdown or notebooks, so both count: a hand-authored .ipynb
+    # claims its series exactly as a .md report does (its markdown cells carry the
+    # **Series:** line). Missing this is what spawns a duplicate auto stub.
     human_claimed = set()
     if reports_dir.exists():
-        for f in reports_dir.glob("**/*.md"):
+        for f in reports_dir.glob("**/*"):
+            if f.suffix not in (".md", ".ipynb"):
+                continue
             if f.name.lower() == "readme.md" or auto_dir in f.parents:
                 continue
-            declared = parse_series(f.read_text())
+            if f.suffix == ".ipynb":
+                try:
+                    content = notebook_markdown(json.loads(f.read_text()))
+                except json.JSONDecodeError:
+                    continue
+            else:
+                content = f.read_text()
+            declared = parse_series(content)
             if declared:
                 human_claimed.add(declared)
 
@@ -808,6 +820,14 @@ def generate_series_reports(root):
     for row in eln_conn.execute("SELECT code, title FROM experiment_codes ORDER BY code"):
         code, title = row["code"], row["title"]
         if code in human_claimed:
+            continue
+        # Skip series with no active experiments: an orphaned title->code mapping
+        # (a series deleted after its code was picked) must not spawn an empty
+        # "No active repetitions" report.
+        if not eln_conn.execute(
+            "SELECT 1 FROM experiments WHERE experiment_type = ? AND excluded = 0 LIMIT 1",
+            (title,),
+        ).fetchone():
             continue
         block = _auto_block(code, _series_earliest_date(code, title, eln_conn, sdgl_conn))
         auto_path = auto_dir / f"{code}.md"

@@ -27,6 +27,40 @@ def test_parser_has_all_subcommands():
         assert name in sub.choices
 
 
+def test_regenerate_scaffold_series_flag_runs_scaffolder(monkeypatch, tmp_path, capsys):
+    import eln.cli as cli
+    import eln.generators.reports as reports
+    cfg = Config(data_root=tmp_path)
+    monkeypatch.setattr(cli, "_load", lambda args: cfg)
+
+    calls = {}
+
+    def _fake_scaffold(root):
+        calls["root"] = root
+        return [root / "reports/auto/COV2D.md"]
+    monkeypatch.setattr(reports, "generate_series_reports", _fake_scaffold)
+    monkeypatch.setattr("eln.generators.generate_all", lambda root, out: {})
+
+    rc = cli.main(["regenerate", "--scaffold-series"])
+    assert rc == 0
+    assert calls["root"] == tmp_path
+    assert "scaffolded 1 series report stub" in capsys.readouterr().out
+
+
+def test_regenerate_without_flag_skips_scaffolder(monkeypatch, tmp_path):
+    import eln.cli as cli
+    import eln.generators.reports as reports
+    cfg = Config(data_root=tmp_path)
+    monkeypatch.setattr(cli, "_load", lambda args: cfg)
+
+    def _fail(root):
+        raise AssertionError("scaffolder should not run without --scaffold-series")
+    monkeypatch.setattr(reports, "generate_series_reports", _fail)
+    monkeypatch.setattr("eln.generators.generate_all", lambda root, out: {})
+
+    assert cli.main(["regenerate"]) == 0
+
+
 def test_cli_timestamp_retry(monkeypatch, tmp_path, capsys):
     import eln.cli as cli
     from eln import timestamp
