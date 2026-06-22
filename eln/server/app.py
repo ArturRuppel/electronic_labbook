@@ -56,7 +56,6 @@ ASSETS_DIR = Path(__file__).resolve().parents[2] / "catalog"
 CORE_GENERATED_PAGES = {
     "experiments.html",
     "protocols.html",
-    "notebooks.html",
     "reports.html",
 }
 

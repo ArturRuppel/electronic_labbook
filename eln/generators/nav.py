@@ -13,7 +13,6 @@ CORE_NAV = [
     NavLink("Data Graph", "/"),
     NavLink("Experiments", "experiments.html"),
     NavLink("Protocols", "protocols.html"),
-    NavLink("Notebooks", "notebooks.html"),
     NavLink("Reports", "reports.html"),
 ]
 

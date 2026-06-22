@@ -287,3 +287,50 @@ def verify_provenance(root=None):
         return divergences
     finally:
         conn.close()
+
+
+def stale_outputs(root=None):
+    """Stamped outputs whose inputs changed since the output was produced.
+
+    Sibling to :func:`verify_provenance` (which checks the *output's* own hash).
+    For each ``generates`` edge, re-hash every input recorded at stamp time — in
+    the repo via ``sha256_file``, external (filesystem) via the scan index
+    (:func:`_external_hash`) — and compare to the stored hash. Any mismatch means
+    the figure was made from older inputs and the notebook should be re-run.
+
+    Each entry is ``{"node_id", "path", "status": "stale", "changed_inputs": [...]}``.
+    Outputs whose inputs all still match are omitted.
+    """
+    root = _resolve_root(root)
+    sdgl = SDGL(root)
+    conn = sdgl.connect()
+    try:
+        from eln.sdgl.engine import json_loads
+        try:
+            rows = conn.execute(
+                "SELECT target_id, metadata FROM edges "
+                "WHERE relation_type = 'generates'"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []  # sdgl.db has no edges table yet → nothing stamped
+        stale = []
+        for row in rows:
+            meta = json_loads(row["metadata"]) or {}
+            inputs = meta.get("inputs") or {}
+            changed = []
+            for input_rel, stored in inputs.items():
+                in_repo = root / input_rel
+                if in_repo.exists():
+                    current = sha256_file(in_repo)
+                else:
+                    current = _external_hash(conn, input_rel)
+                if current is not None and current != stored:
+                    changed.append(input_rel)
+            if changed:
+                node = row["target_id"]
+                path = node[len("dataset:"):] if node.startswith("dataset:") else node
+                stale.append({"node_id": node, "path": path, "status": "stale",
+                              "changed_inputs": sorted(changed)})
+        return stale
+    finally:
+        conn.close()
