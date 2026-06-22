@@ -48,11 +48,10 @@ def _local_refs(html):
 
 def _staticize(html):
     """Prepare a generated page for the static bundle: drop the server-only
-    ``auth.js`` script, and repoint the dynamic ``/`` (Data Graph) nav link and
-    home card at the bundle's static ``sdgl.html`` snapshot. Media links untouched."""
+    ``auth.js`` script and repoint the dynamic ``/`` (Data Graph) nav link at the
+    bundle's static ``sdgl.html`` snapshot. Media links untouched."""
     html = _AUTH_JS.sub("", html)
     html = html.replace('<a href="/">Data Graph</a>', '<a href="sdgl.html">Data Graph</a>')
-    html = html.replace('<a href="/" class="card">', '<a href="sdgl.html" class="card">')
     return html
 
 
@@ -182,7 +181,7 @@ def export_all(root, dest):
     #    redirect the bundle root to it. Mark them as known generated siblings so
     #    the repointed Data Graph nav links resolve (not copied, not flagged).
     _write_sdgl_snapshot(root, dest)
-    generated.update({"sdgl.html", "sdgl_data.json", "index.html"})
+    generated.update({"sdgl.html", "index.html"})
 
     # 4. Transitively copy referenced assets.
     _seen, missing, _total = _collect_assets(start_pages, root, dest, generated)
@@ -197,30 +196,37 @@ _REDIRECT = ('<!doctype html><meta charset="utf-8">'
 # The live SDGL page is a code-repo asset (served at / by the server), not a
 # generator output, so the export reads it straight from catalog/.
 _SDGL_SOURCE = Path(__file__).resolve().parents[1] / "catalog" / "sdgl.html"
-_SDGL_STATIC_FLAG = '    <script>window.SDGL_STATIC = true;</script>\n</head>'
 
 
-def _staticize_sdgl(html):
+def _staticize_sdgl(html, snapshot):
     """Turn the live SDGL page into its static-bundle form: drop ``auth.js``, flip
-    on static mode (so it reads ``sdgl_data.json`` instead of the API and hides
-    every mutating control), and repoint its own Data Graph nav link at itself."""
+    on static mode (so it reads the embedded snapshot instead of the API and hides
+    every mutating control), embed the data snapshot, and repoint its own Data Graph
+    nav link at itself.
+
+    The snapshot is embedded inline (not written as a sibling JSON the page fetches)
+    so the bundle renders when opened straight from disk — browsers block ``fetch()``
+    of sibling files under the ``file://`` protocol, which would leave the graph blank."""
     html = _AUTH_JS.sub("", html)
     html = html.replace('<a href="/">Data Graph</a>', '<a href="sdgl.html">Data Graph</a>')
-    # Set the flag in <head>, before the page's main script runs.
-    html = html.replace("</head>", _SDGL_STATIC_FLAG, 1)
+    # Escape ``</`` so the JSON can't close the <script> early. Set the flag + data
+    # in <head>, before the page's main script runs.
+    data = json.dumps(snapshot).replace("</", "<\\/")
+    flag = (f'    <script>window.SDGL_STATIC = true;\n'
+            f'    window.SDGL_DATA = {data};</script>\n</head>')
+    html = html.replace("</head>", flag, 1)
     return html
 
 
 def _write_sdgl_snapshot(root, dest):
-    """Write the static SDGL page + its ``sdgl_data.json`` snapshot into the bundle
-    and point the bundle root (``index.html``) at it. The snapshot is the same
+    """Write the static SDGL page (with its data snapshot embedded inline) into the
+    bundle and point the bundle root (``index.html``) at it. The snapshot is the same
     payload the live ``/api/sdgl/tree`` and ``/api/sdgl/scan/unmatched`` endpoints
     return, so the static page renders identically offline."""
     from eln.sdgl import SDGL
     sdgl = SDGL(root)
     snapshot = {"tree": sdgl.tree(), "unmatched": sdgl.list_findings("unmatched")}
-    (dest / "sdgl_data.json").write_text(json.dumps(snapshot))
-    (dest / "sdgl.html").write_text(_staticize_sdgl(_SDGL_SOURCE.read_text()))
+    (dest / "sdgl.html").write_text(_staticize_sdgl(_SDGL_SOURCE.read_text(), snapshot))
     (dest / "index.html").write_text(_REDIRECT.format(target="sdgl.html"))
 
 

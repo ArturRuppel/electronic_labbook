@@ -101,27 +101,20 @@ def test_local_refs_keeps_relative_skips_external():
     ]
 
 
-def test_staticize_drops_auth_and_repoints_graph_links():
+def test_staticize_drops_auth_and_repoints_graph_link():
     html = (
         '<head>\n    <script src="auth.js"></script>\n</head>\n'
         '<div class="nav">\n'
         '        <a href="/">Data Graph</a>\n'
         '        <a href="experiments.html">Experiments</a>\n'
         '    </div>\n'
-        '            <a href="/" class="card">\n'
-        '                <div class="card-icon">D</div>\n'
-        '                <div class="card-title">Data Graph</div>\n'
-        '            </a>\n'
-        '            <a href="reports.html" class="card">keep</a>\n'
     )
     out = _staticize(html)
     assert "auth.js" not in out
     assert 'href="/"' not in out                       # dynamic root repointed
-    # The Data Graph link/card now point at the bundle's static SDGL snapshot.
+    # The Data Graph nav link now points at the bundle's static SDGL snapshot.
     assert '<a href="sdgl.html">Data Graph</a>' in out
-    assert '<a href="sdgl.html" class="card">' in out
     assert 'href="experiments.html"' in out            # nav itself stays
-    assert 'href="reports.html" class="card"' in out   # other cards stay
 
 
 def test_strip_nav_removes_whole_nav_block():
@@ -206,18 +199,22 @@ def test_export_all_layout_and_staticized(data_root, tmp_path):
 
 
 def test_export_all_writes_static_sdgl_snapshot(data_root, tmp_path):
-    import json
+    import json, re
     from eln.share import export_all
     dest = tmp_path / "bundle"
     result = export_all(data_root, dest)
 
-    # The static SDGL page + its data snapshot are in the bundle.
+    # The static SDGL page carries its data snapshot embedded inline (not as a
+    # sibling JSON the page fetches) so the bundle renders when opened from disk.
     page = (dest / "sdgl.html").read_text()
     assert "window.SDGL_STATIC = true" in page      # static mode on
     assert "auth.js" not in page                     # server-only script dropped
     assert '<a href="sdgl.html">Data Graph</a>' in page  # own nav repointed
+    assert not (dest / "sdgl_data.json").exists()    # data is inline, not fetched
 
-    snapshot = json.loads((dest / "sdgl_data.json").read_text())
+    embedded = re.search(r"window\.SDGL_DATA = (\{.*?\});</script>", page, re.S)
+    assert embedded, "snapshot must be embedded inline in the page"
+    snapshot = json.loads(embedded.group(1))
     assert "experiments" in snapshot["tree"]         # same shape as /api/sdgl/tree
     assert "unmatched" in snapshot
     # The TFMSP series scanned into the fixture surfaces in the snapshot.

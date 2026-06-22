@@ -65,18 +65,22 @@ dropped as external (`_EXTERNAL`, `eln/share.py:20`) and won't load under
 
 **Done.** `export_all` now writes the SDGL graph as the bundle's front door:
 - `eln/share.py:_write_sdgl_snapshot` dumps `SDGL.tree()` +
-  `list_findings("unmatched")` to `sdgl_data.json` (same shape the live
-  `/api/sdgl/tree` + `/scan/unmatched` return), copies the code-repo
-  `catalog/sdgl.html` into the bundle via `_staticize_sdgl` (drops `auth.js`,
-  injects `window.SDGL_STATIC = true`, repoints its own Data Graph link), and
-  redirects the bundle root `index.html` to `sdgl.html`.
-- `catalog/sdgl.html` gained a `STATIC` branch: in static mode it loads
-  `sdgl_data.json` instead of fetching the API and hides every mutating control
-  (selection checkboxes, the Backup button, the Open-in-OS buttons).
-- `_staticize` now **repoints** the Data Graph nav link/home card to `sdgl.html`
-  (instead of dropping them), so the graph is reachable from every page in the
-  bundle. `sdgl.html`/`sdgl_data.json` are treated as known generated siblings so
-  those links don't get flagged missing.
+  `list_findings("unmatched")` (same shape the live `/api/sdgl/tree` +
+  `/scan/unmatched` return), copies the code-repo `catalog/sdgl.html` into the
+  bundle via `_staticize_sdgl` (drops `auth.js`, injects
+  `window.SDGL_STATIC = true` **plus the snapshot inline as `window.SDGL_DATA`**,
+  repoints its own Data Graph link), and redirects the bundle root `index.html`
+  to `sdgl.html`. The data is embedded inline rather than written as a fetched
+  sibling JSON so the bundle renders when opened from disk — browsers block
+  `fetch()` of sibling files under `file://`, which left the graph blank.
+- `catalog/sdgl.html` gained a `STATIC` branch: in static mode it reads the
+  embedded `window.SDGL_DATA` instead of fetching the API and hides every
+  mutating control (selection checkboxes, the Backup button, the Open-in-OS
+  buttons).
+- `_staticize` now **repoints** the Data Graph nav link to `sdgl.html`
+  (instead of dropping it), so the graph is reachable from every page in the
+  bundle. `sdgl.html` is treated as a known generated sibling so those links
+  don't get flagged missing.
 - Tests: `test_export_all_writes_static_sdgl_snapshot` + updated staticize/layout
   assertions in `tests/test_share.py`.
 
@@ -316,7 +320,7 @@ like code** (the file itself is copied into the data repo, not just referenced).
      derived/curated badge) and a `detailArtifact` pane showing the provenance
      recipe (function, library/data commits, params, input fingerprints, or
      tool/method). Flows through to the **static bundle** for free, since the
-     export dumps `tree()` to `sdgl_data.json` and copies `sdgl.html`.
+     export embeds `tree()` inline into the copied `sdgl.html`.
 
 3. **Server Commit button** (`catalog/sdgl.html` + `eln/server/app.py`):
    a "Commit… (N)" button beside "Backup… (N)" in the SDGL toolbar, driven by the

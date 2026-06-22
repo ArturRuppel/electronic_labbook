@@ -12,9 +12,9 @@
             color: #27313a;
             background: #eef1f4;
         }
-        .header { background: #263646; color: white; padding: 1.25rem 1.5rem; }
-        .header h1 { font-size: 1.55rem; line-height: 1.2; }
-        .header p { margin-top: 0.25rem; color: #d7e0e7; }
+        .header { background: #263646; color: white; padding: 1.25rem 1.5rem; line-height: 1.6; }
+        .header h1 { font-size: 1.55rem; margin-bottom: 0.25rem; }
+        .header p { color: #d7e0e7; }
         .nav {
             display: flex; flex-wrap: wrap; gap: 1rem; background: white;
             padding: 0.8rem 1.5rem; border-bottom: 1px solid #d7dde2;
@@ -169,10 +169,12 @@
     </main>
     <script>
         const API = '/api/sdgl';
-        // Static-bundle mode: the export injects `window.SDGL_STATIC = true` and a
-        // `sdgl_data.json` snapshot next to this page. In that mode we read the
-        // snapshot instead of the live API and hide every mutating control
-        // (selection/backup, Open-in-OS) — there is no server to talk to.
+        // Static-bundle mode: the export injects `window.SDGL_STATIC = true` and an
+        // inline `window.SDGL_DATA` snapshot into this page's <head>. In that mode we
+        // read the embedded snapshot instead of the live API and hide every mutating
+        // control (selection/backup, Open-in-OS) — there is no server to talk to.
+        // The data is embedded (not fetched) so the bundle works opened from disk
+        // (`file://`), where the browser blocks fetch() of sibling files.
         const STATIC = window.SDGL_STATIC === true;
         const TYPE_COLORS = {
             experiment: '#2d6f9f', protocol: '#7f5f2f', report: '#5d7290',
@@ -225,7 +227,7 @@
         async function loadAll() {
             let tree, findings;
             if (STATIC) {
-                const data = await fetch('sdgl_data.json').then(r => r.json());
+                const data = window.SDGL_DATA || {};
                 tree = data.tree || {experiments: []};
                 findings = data.unmatched || [];
             } else {
