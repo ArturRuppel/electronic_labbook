@@ -842,7 +842,12 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
         reports_html_list = []
         for report_file in report_files:
             if report_file.suffix == ".ipynb":
-                content = notebook_markdown(json.loads(report_file.read_text()))
+                try:
+                    nb = json.loads(report_file.read_text())
+                except json.JSONDecodeError:
+                    print(f"Skipping malformed notebook report: {report_file}")
+                    continue
+                content = notebook_markdown(nb)
             else:
                 content = report_file.read_text()
 

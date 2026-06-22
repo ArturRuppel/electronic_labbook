@@ -17,8 +17,9 @@ def test_parse_series_absent():
 
 
 def test_parse_series_rejects_non_code():
-    # A five-char token that is not a valid code grammar is not a series.
-    assert parse_series("**Series:** ab cd") is None
+    # 5 non-space chars match the regex, but the SDGL grammar rejects them, so the
+    # parse_code_folder filter (not the regex) is what returns None here.
+    assert parse_series("**Series:** a!b@c") is None
 
 
 from eln.generators.reports import notebook_markdown
@@ -137,3 +138,13 @@ def test_report_card_shows_stale_badge(tmp_path):
     text = generate_reports(tmp_path).read_text()
     assert "stale" in text.lower()
     assert out_rel in text  # the produced artifact is listed in the footer
+
+
+def test_generate_skips_malformed_notebook(tmp_path):
+    from eln.generators.reports import generate_reports
+    (tmp_path / "experiments.db").touch()
+    (tmp_path / "reports").mkdir()
+    (tmp_path / "reports" / "broken.ipynb").write_text("{ this is not valid json")
+    (tmp_path / "reports" / "ok.md").write_text("# Good\n\nReadable report.\n")
+    text = generate_reports(tmp_path).read_text()  # must not raise
+    assert "Readable report." in text  # the good report still renders
