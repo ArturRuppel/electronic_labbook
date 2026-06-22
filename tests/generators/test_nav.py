@@ -8,7 +8,6 @@ EXPECTED = (
     '        <a href="/">Data Graph</a>\n'
     '        <a href="experiments.html">Experiments</a>\n'
     '        <a href="protocols.html">Protocols</a>\n'
-    '        <a href="notebooks.html">Notebooks</a>\n'
     '        <a href="reports.html">Reports</a>\n'
     '        <a href="presentations.html">Presentations</a>\n'
     '    </div>'

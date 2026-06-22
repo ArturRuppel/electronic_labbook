@@ -114,10 +114,10 @@ def test_generate_all_writes_all_pages(data_root):
     root, db, expected = data_root
     written = generate_all(root)
     catalog = root / "catalog"
-    for page in ("experiments.html", "protocols.html", "notebooks.html",
+    for page in ("experiments.html", "protocols.html",
                  "reports.html", "presentations.html"):
         assert (catalog / page).exists(), f"{page} missing"
-    assert set(written) == {"experiments", "protocols", "notebooks", "reports",
+    assert set(written) == {"experiments", "protocols", "reports",
                             "presentations"}
 
 

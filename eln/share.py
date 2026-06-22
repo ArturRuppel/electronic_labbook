@@ -85,7 +85,7 @@ _HTML_SUFFIXES = {".html", ".htm"}
 # intentionally absent; their cross-links are inert and must not be flagged as
 # missing assets.
 _CATALOG_PAGES = {"index.html", "experiments.html", "protocols.html",
-                  "notebooks.html", "reports.html", "presentations.html",
+                  "reports.html", "presentations.html",
                   "admin.html", "sdgl.html"}
 
 
