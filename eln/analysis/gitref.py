@@ -41,6 +41,18 @@ def head_commit(repo_dir):
     return commit, bool(status)
 
 
+def path_dirty(repo_dir, path):
+    """Return True if ``path`` has uncommitted changes in ``repo_dir`` right now.
+
+    Scopes ``git status`` to the single path, so an unrelated dirty file elsewhere
+    in the repo doesn't taint this artifact — unlike :func:`head_commit`, which
+    measures the whole working tree. False when the path is clean, ignored, or
+    ``repo_dir`` isn't a git repository (``_git`` returns None on error).
+    """
+    status = _git(repo_dir, "status", "--porcelain", "--", str(path))
+    return bool(status)
+
+
 def repo_root(path):
     """Return the absolute top-level of the repo containing ``path``, or None.
 

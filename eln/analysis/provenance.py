@@ -137,7 +137,14 @@ def stamp(
         data_commit, data_dirty = head_commit(root)
     else:
         data_dirty = False
-    if data_dirty:
+    # Curated artifacts are copied into the data repo *then* stamped, so the working
+    # tree is necessarily dirty at this instant and the real commit lands afterwards
+    # — the whole-repo flag is meaningless here. Their dirtiness is a live, path-
+    # scoped property recomputed at display time (see SDGL.tree()), so don't persist
+    # a known-false flag or warn about it.
+    if kind == "curated":
+        data_dirty = False
+    elif data_dirty:
         warnings.warn(f"data repo has uncommitted changes when stamping {rel_path}")
 
     record = {

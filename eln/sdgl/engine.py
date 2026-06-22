@@ -1414,12 +1414,22 @@ class SDGL:
             node_meta = json_loads(node["metadata"]) if node else {}
             record = json_loads(edge["metadata"])
             rel_path = node_meta.get("rel_path") or record.get("path")
+            kind = node_meta.get("kind") or record.get("kind")
+            # Curated artifacts are tracked files in the data repo, so their dirty
+            # state is a *live* property of the working tree, not the frozen
+            # whole-repo flag captured at stamp time. That flag is always True
+            # (copy-then-stamp guarantees the just-copied file makes the repo
+            # dirty), so recompute it against current HEAD, scoped to this path.
+            if kind == "curated" and rel_path and isinstance(record.get("notebook"), dict):
+                from eln.analysis.gitref import path_dirty
+                record["notebook"]["dirty"] = path_dirty(
+                    self.root_path, self.root_path / rel_path)
             artifacts.append({
                 "node_id": target,
                 "name": (node["title"] if node else None)
                         or (rel_path or target).rsplit("/", 1)[-1],
                 "rel_path": rel_path,
-                "kind": node_meta.get("kind") or record.get("kind"),
+                "kind": kind,
                 "record": record,
             })
         artifacts.sort(key=lambda item: item["rel_path"] or item["node_id"])
