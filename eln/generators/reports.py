@@ -8,6 +8,7 @@ repetitions (dates derived from raw-file mtimes), and the deduplicated protocols
 """
 
 import argparse
+import json
 import re
 import sqlite3
 from datetime import datetime
@@ -731,10 +732,11 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
     if not reports_dir.exists():
         reports_dir.mkdir(parents=True)
 
-    # Get all markdown files in reports directory (recursively). README.md is the
-    # folder's own documentation, not a report — skip it.
+    # Reports are markdown or notebook files under reports/ (recursively).
+    # README.md is the folder's own documentation, not a report — skip it.
     report_files = sorted(
-        (p for p in reports_dir.glob("**/*.md") if p.name.lower() != "readme.md"),
+        (p for p in reports_dir.glob("**/*")
+         if p.suffix in (".md", ".ipynb") and p.name.lower() != "readme.md"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -758,7 +760,10 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
 
         reports_html_list = []
         for report_file in report_files:
-            content = report_file.read_text()
+            if report_file.suffix == ".ipynb":
+                content = notebook_markdown(json.loads(report_file.read_text()))
+            else:
+                content = report_file.read_text()
 
             # Fix relative image paths to be relative to catalog directory
             report_dir = report_file.parent.relative_to(root)
