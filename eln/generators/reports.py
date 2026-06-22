@@ -13,7 +13,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from eln.sdgl import format_experiment_id
+from eln.sdgl import format_experiment_id, parse_code_folder
 from eln.generators.catalog import get_experiment_date_from_files
 from eln.generators.nav import render_nav
 
@@ -400,15 +400,20 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-SERIES_RE = re.compile(r'\*\*Series:\*\*\s*([A-Z]{5})')
+# The series declaration captures any 5-char token; the SDGL code grammar (which
+# allows letters and digits, e.g. COV2D) is the authority on whether it is a code.
+SERIES_RE = re.compile(r'\*\*Series:\*\*\s*(\S{5})')
 PLACEHOLDER = "{{experiments}}"
 
 
 def parse_series(content):
-    """Return the declared series code (e.g. 'NESFM') from a '**Series:** CODE'
-    line, or None if the report declares no series."""
+    """Return the declared series code (e.g. 'COV2D') from a '**Series:** CODE'
+    line, or None if the report declares no valid series code."""
     m = SERIES_RE.search(content)
-    return m.group(1) if m else None
+    if not m:
+        return None
+    parsed = parse_code_folder(m.group(1))
+    return parsed["code"] if parsed else None
 
 
 def lookup_series_title(code, eln_conn):
