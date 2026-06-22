@@ -241,6 +241,11 @@ def test_generate_reports_only_one_file(data_root, tmp_path):
     html = path.read_text()
     assert "TFM progress" in html        # the selected report
     assert "Random notes" not in html    # the other report excluded
+    # Standalone export: body shown open, header non-collapsible (no toggle/icon).
+    assert 'class="report-header standalone"' in html
+    assert 'class="report-details" id="details-tfm_progress" style="display: block;"' in html
+    assert 'onclick="toggleReport(' not in html
+    assert '<span class="expand-icon"' not in html
 
 
 def test_export_item_report_flat_no_nav(data_root, tmp_path):
@@ -263,6 +268,11 @@ def test_generate_protocol_catalog_only_one(data_root, tmp_path):
     html = path.read_text()
     assert "Gel casting" in html      # the selected protocol
     assert "Staining" not in html     # the other protocol excluded
+    # Standalone export: body shown open, header non-collapsible (no toggle/icon).
+    assert 'class="protocol-header standalone"' in html
+    assert 'class="protocol-details" id="details-10" style="display: block;"' in html
+    assert 'onclick="toggleProtocol(' not in html
+    assert '<span class="expand-icon"' not in html
 
 
 def test_export_item_protocol_flat_no_nav(data_root, tmp_path):

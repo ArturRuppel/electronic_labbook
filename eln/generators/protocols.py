@@ -155,6 +155,13 @@ PROTOCOLS_HTML_TEMPLATE = """<!DOCTYPE html>
         .protocol-header:hover {{
             background-color: #f3f6f8;
         }}
+        /* Single-protocol export: header is non-interactive, body always open. */
+        .protocol-header.standalone {{
+            cursor: default;
+        }}
+        .protocol-header.standalone:hover {{
+            background-color: transparent;
+        }}
         .protocol-name {{
             font-size: 1.15rem;
             font-weight: 650;
@@ -401,6 +408,10 @@ def generate_protocol_catalog(root, catalog_out=None, plugins=None, only=None,
                 if str(next((p for p in versions if p['is_latest']), versions[0])['id']) == str(only)
             }
 
+        # A single-protocol export (``only`` set) renders the protocol expanded
+        # with a plain, non-collapsible header — nothing to collapse it against.
+        standalone = only is not None
+
         # Generate HTML for each protocol group
         protocols_html_list = []
         for name, versions in protocol_groups.items():
@@ -424,16 +435,21 @@ def generate_protocol_catalog(root, catalog_out=None, plugins=None, only=None,
 
             content_html = markdown_to_html(latest['content']) if latest.get('content') else '<p style="color: #999;">No content available</p>'
 
+            header_cls = "protocol-header standalone" if standalone else "protocol-header"
+            header_onclick = "" if standalone else f" onclick=\"toggleProtocol('{latest['id']}')\""
+            expand_icon = "" if standalone else (
+                f'<span class="expand-icon" id="icon-{latest["id"]}">▶</span>\n                            ')
+            details_style = ' style="display: block;"' if standalone else ""
+
             protocols_html_list.append(f"""
                 <div class="protocol-group" id="{latest['id']}">
-                    <div class="protocol-header" onclick="toggleProtocol('{latest['id']}')">
+                    <div class="{header_cls}"{header_onclick}>
                         <div class="protocol-name">
-                            <span class="expand-icon" id="icon-{latest['id']}">▶</span>
-                            {name}
+                            {expand_icon}{name}
                         </div>
                         <div class="latest-badge">LATEST: v{latest['version']}</div>
                     </div>
-                    <div class="protocol-details" id="details-{latest['id']}">
+                    <div class="protocol-details" id="details-{latest['id']}"{details_style}>
                         {f'<div class="protocol-description">{latest["description"]}</div>' if latest.get('description') else ''}
                         {version_select}
                         <div class="protocol-content" id="content-{name}">
