@@ -17,8 +17,23 @@ def main():
     root = tkinter.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
+    # Hide dotfiles/dotdirs by default, but keep the toggle so they can be shown.
+    # The variables only exist once Tk's file-dialog code is autoloaded, which the
+    # (deliberately failing) probe call below forces.
     try:
-        path = filedialog.askdirectory(title="Choose backup destination")
+        root.tk.call("tk_getOpenFile", "-badoption")
+    except tkinter.TclError:
+        pass
+    try:
+        root.tk.call("set", "::tk::dialog::file::showHiddenBtn", "1")
+        root.tk.call("set", "::tk::dialog::file::showHiddenVar", "0")
+    except tkinter.TclError:
+        pass
+    try:
+        # mustexist=False lets the user type a new folder name; the caller mkdir's it.
+        path = filedialog.askdirectory(
+            title="Choose backup destination", mustexist=False
+        )
     finally:
         root.destroy()
     if path:
