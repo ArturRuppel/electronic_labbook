@@ -16,13 +16,14 @@ static HTML page into `root/catalog` (or an explicit `catalog_out`):
   protocols used. An unknown series renders an inline error rather than crashing.
 - `protocols.py` → `protocols.html`, grouped by name with version history.
 - `presentations.py` → `presentations.html`, scanning `presentations/`.
-- `home.py` → `index.html` from the static `catalog/home_template.html` asset
-  (a code-repo input), filling in the experiment/protocol/report/presentation counts.
+
+There is no separate landing page: the Scientific Data Graph Layer (`sdgl.html`,
+served at `/`) is the notebook's home page.
 
 ## Usage
 
 ```bash
-labbook regenerate          # run all five (DB -> catalog HTML)
+labbook regenerate          # run all generators (DB -> catalog HTML)
 ```
 
 Or from Python: `from eln.generators import generate_all; generate_all(root)`.
@@ -30,6 +31,6 @@ Or from Python: `from eln.generators import generate_all; generate_all(root)`.
 ## Regression guard: byte-identical regeneration
 
 Regenerating over unchanged inputs produces identical bytes — footers are static
-and the home page's "Last updated" is date-only (no `HH:MM:SS` churn). The
-vestigial `generation_date` kwarg from the original scripts was dropped so this is
-structural, not incidental. Covered by `tests/generators/test_generate.py`.
+(no `HH:MM:SS` churn). The vestigial `generation_date` kwarg from the original
+scripts was dropped so this is structural, not incidental. Covered by
+`tests/generators/test_generate.py`.

@@ -17,7 +17,7 @@ The server is **local-only and unauthenticated by design**.
   reports, tags, the full SDGL graph/tree/scan surface, `/api/regenerate`, and
   `/api/publish`.
 - **HTML with overlay injection**: generated pages (`experiments.html`,
-  `protocols.html`, `reports.html`, `presentations.html`, `index.html`) are read
+  `protocols.html`, `reports.html`, `presentations.html`) are read
   from `root/catalog/`; the static frontend (`sdgl.html` at `/`, `admin.html`,
   `admin.js`, `edit-overlay.*`) ships in the **code repo's** `catalog/` and is
   found via `ASSETS_DIR`. On serve, `auth.js` is stripped and the edit overlay is

@@ -16,7 +16,6 @@ plugin uses only the points it needs:
 | `static_mount` | **serving route** | `StaticMount(url_prefix, source)` — serve `source(root)` at `/{url_prefix}/<path>` |
 | `register_routes` | **serving route** | `register_routes(app, root)` — register arbitrary Flask routes |
 | `scan_roots` | **scan-root contribution** | `scan_roots(root) -> list` — extra SDGL scan roots |
-| `home_card` + `home_count` | home page | `HomeCard(icon, description)` + `home_count(root) -> int` — a card + stat tile |
 
 ## Discovery
 

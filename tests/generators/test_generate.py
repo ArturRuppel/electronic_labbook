@@ -15,7 +15,6 @@ from eln.generators import (
     generate_reports,
     generate_protocol_catalog,
     generate_presentations,
-    generate_home,
 )
 from eln.generators.reports import parse_series, build_experiments_block
 
@@ -116,10 +115,10 @@ def test_generate_all_writes_all_pages(data_root):
     written = generate_all(root)
     catalog = root / "catalog"
     for page in ("experiments.html", "protocols.html", "notebooks.html",
-                 "reports.html", "presentations.html", "index.html"):
+                 "reports.html", "presentations.html"):
         assert (catalog / page).exists(), f"{page} missing"
     assert set(written) == {"experiments", "protocols", "notebooks", "reports",
-                            "presentations", "home"}
+                            "presentations"}
 
 
 def test_catalog_has_ids_and_derived_dates(data_root):
@@ -146,21 +145,13 @@ def test_reports_inject_series_overview(data_root):
     assert "Random notes" in html
 
 
-def test_protocols_and_presentations_and_home(data_root):
+def test_protocols_and_presentations(data_root):
     root, db, _ = data_root
     generate_protocol_catalog(root)
     generate_presentations(root)
-    generate_home(root)
     catalog = root / "catalog"
     assert "Gel casting" in (catalog / "protocols.html").read_text()
     assert "Lab meeting" in (catalog / "presentations.html").read_text()
-    home = (catalog / "index.html").read_text()
-    assert "__TOTAL_EXPERIMENTS__" not in home  # placeholder substituted
-    assert ">3<" in home or "3" in home        # 3 experiments counted
-    # The presentations card + count come from the plugin, not hardcoded markup.
-    assert "__PLUGIN_CARDS__" not in home and "__PLUGIN_STATS__" not in home
-    assert 'href="presentations.html" class="card"' in home
-    assert "Slide decks and seminar talks" in home  # plugin home_card description
 
 
 def test_regeneration_is_byte_identical(data_root):

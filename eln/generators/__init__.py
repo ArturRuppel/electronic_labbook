@@ -5,12 +5,11 @@ optional ``sdgl.db`` build artifact, ``reports/`` and ``presentations/``) and
 writes a static HTML page into ``root/catalog`` (or an explicit ``catalog_out``).
 
 Regeneration is byte-identical for unchanged inputs: no timestamp churn (static
-footers; the home page's "Last updated" is date-only). Experiment start dates are
-always derived from earliest raw-file mtimes via SDGL, never stored in the DB.
+footers). Experiment start dates are always derived from earliest raw-file mtimes
+via SDGL, never stored in the DB.
 """
 
 from eln.generators.catalog import generate_catalog
-from eln.generators.home import generate_home
 from eln.generators.notebooks import generate_notebooks
 from eln.generators.presentations import generate_presentations
 from eln.generators.protocols import generate_protocol_catalog
@@ -19,7 +18,6 @@ from eln.plugins import discover_plugins
 
 __all__ = [
     "generate_catalog",
-    "generate_home",
     "generate_notebooks",
     "generate_presentations",
     "generate_protocol_catalog",
@@ -31,7 +29,7 @@ __all__ = [
 def generate_all(root, catalog_out=None):
     """Run the core generators and every plugin generator against *root*.
 
-    The same discovered plugin set feeds each core generator (so nav/home stay
+    The same discovered plugin set feeds each core generator (so the nav stays
     consistent) and supplies the plugin-contributed pages. Returns a dict mapping
     each page name to the path it was written to.
     """
@@ -41,7 +39,6 @@ def generate_all(root, catalog_out=None):
         "protocols": generate_protocol_catalog(root, catalog_out, plugins=plugins),
         "notebooks": generate_notebooks(root, catalog_out, plugins=plugins),
         "reports": generate_reports(root, catalog_out, plugins=plugins),
-        "home": generate_home(root, catalog_out, plugins=plugins),
     }
     for plugin in plugins:
         if plugin.generate:

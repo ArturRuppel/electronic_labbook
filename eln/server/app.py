@@ -58,7 +58,6 @@ CORE_GENERATED_PAGES = {
     "protocols.html",
     "notebooks.html",
     "reports.html",
-    "index.html",
 }
 
 OVERLAY_SNIPPET = '''

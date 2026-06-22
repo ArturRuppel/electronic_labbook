@@ -41,15 +41,6 @@ class StaticMount:
 
 
 @dataclass(frozen=True)
-class HomeCard:
-    """Presentation metadata for the home-page card. Title and href come from the
-    plugin's :class:`NavLink`; the count (if any) from ``home_count``."""
-
-    icon: str
-    description: str
-
-
-@dataclass(frozen=True)
 class Plugin:
     """A unit of notebook functionality. Every extension point is optional."""
 
@@ -59,8 +50,6 @@ class Plugin:
     static_mount: Optional[StaticMount] = None
     scan_roots: Optional[Callable[[Path], list]] = None
     register_routes: Optional[Callable[[Any, Path], None]] = None
-    home_card: Optional[HomeCard] = None
-    home_count: Optional[Callable[[Path], int]] = None
 
 
 def _builtin_plugins() -> list:
@@ -117,7 +106,6 @@ def effective_scan_roots(config_roots, root, plugins=None) -> list:
 __all__ = [
     "NavLink",
     "StaticMount",
-    "HomeCard",
     "Plugin",
     "discover_plugins",
     "effective_scan_roots",
