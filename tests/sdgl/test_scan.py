@@ -163,3 +163,76 @@ def test_scan_roots_reports_progress(data_root):
     SDGL(root).scan_roots([{"name": "data", "path": "data"}], progress=events.append)
     assert any(e.get("phase") == "root" and e.get("root") == "data" for e in events)
     assert any(e.get("phase") == "done" for e in events)
+
+
+# --- report sync (markdown + notebooks) -------------------------------------
+
+import json
+
+
+def _ipynb(markdown):
+    return json.dumps({
+        "cells": [{"cell_type": "markdown", "source": markdown},
+                  {"cell_type": "code", "source": "print('hidden')", "outputs": []}],
+        "metadata": {}, "nbformat": 4, "nbformat_minor": 5,
+    })
+
+
+def test_sync_reports_indexes_notebook_and_skips_readme(data_root):
+    """A .ipynb report is registered (from its markdown cells) and README.md is
+    not; an alphanumeric **Series:** code links the report to its experiments."""
+    root, db, _ = data_root
+    # Series COV2D has a digit -> exercises the alphanumeric series match.
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO experiment_codes (title, code) VALUES ('Coverage', 'COV2D')")
+    conn.execute("INSERT INTO experiments (experiment_type, repetition, excluded, file_path) "
+                 "VALUES ('Coverage', 1, 0, 'x')")
+    conn.commit()
+    conn.close()
+
+    reports = root / "reports"
+    reports.mkdir()
+    (reports / "README.md").write_text("# reports\n\nFolder docs, not a report.\n")
+    (reports / "cov2d.ipynb").write_text(
+        _ipynb("# COV2D — analysis\n\n**Series:** COV2D\n\n{{experiments}}\n"))
+
+    SDGL(root).scan_from_config()
+
+    conn = sqlite3.connect(db)
+    conn.row_factory = sqlite3.Row
+    paths = {r["file_path"] for r in conn.execute("SELECT file_path FROM reports")}
+    titles = {r["file_path"]: r["title"] for r in conn.execute("SELECT file_path, title FROM reports")}
+    conn.close()
+    assert "reports/cov2d.ipynb" in paths
+    assert "reports/README.md" not in paths
+    assert titles["reports/cov2d.ipynb"] == "COV2D — analysis"  # H1 from a markdown cell
+
+    sdgl = SDGL(root)
+    c = sdgl.connect()
+    has_report = c.execute(
+        "SELECT COUNT(*) FROM edges WHERE relation_type = 'has_report' "
+        "AND source_id = 'experiment:COV2D-01'"
+    ).fetchone()[0]
+    c.close()
+    assert has_report == 1  # alphanumeric series code linked, not dropped
+
+
+def test_sync_reports_prunes_deleted_notebook(data_root):
+    """Deleting a report file prunes its row and node on the next scan."""
+    root, db, _ = data_root
+    reports = root / "reports"
+    reports.mkdir()
+    nb = reports / "note.ipynb"
+    nb.write_text(_ipynb("# Note\n\nNo series here.\n"))
+    SDGL(root).scan_from_config()
+
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT COUNT(*) FROM reports WHERE file_path = 'reports/note.ipynb'").fetchone()[0] == 1
+    conn.close()
+
+    nb.unlink()
+    SDGL(root).scan_from_config()
+
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT COUNT(*) FROM reports WHERE file_path = 'reports/note.ipynb'").fetchone()[0] == 0
+    conn.close()

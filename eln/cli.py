@@ -129,6 +129,13 @@ def cmd_regenerate(args):
     from eln.generators import generate_all
 
     config = _load(args)
+    # Scaffolding writes stub reports into the data repo (reports/auto/), so it is
+    # opt-in and runs before the read-only render below.
+    if getattr(args, "scaffold_series", False):
+        from eln.generators.reports import generate_series_reports
+
+        written_stubs = generate_series_reports(config.data_root)
+        print(f"  scaffolded {len(written_stubs)} series report stub(s) under reports/auto/")
     written = generate_all(config.data_root, args.catalog_out)
     for name, path in written.items():
         print(f"  {name}: {path}")
@@ -295,6 +302,9 @@ def build_parser():
 
     p = sub.add_parser("regenerate", help="DB -> catalog HTML")
     p.add_argument("--catalog-out", default=None)
+    p.add_argument("--scaffold-series", action="store_true",
+                   help="create/refresh one auto report per series under "
+                        "reports/auto/ before rendering (writes into the data repo)")
     p.set_defaults(func=cmd_regenerate)
 
     p = sub.add_parser("rebuild", help="experiments.sql -> DB")
