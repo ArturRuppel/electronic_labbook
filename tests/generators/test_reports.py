@@ -87,8 +87,10 @@ def test_generate_renders_notebook_report(tmp_path):
         {"cell_type": "code", "source": ["secret = compute()\n"], "outputs": []},
     ])
     text = generate_reports(tmp_path).read_text()
-    assert "Interpretation prose." in text          # markdown rendered
-    assert "secret = compute()" not in text          # code hidden
+    prose = text.split('class="report-code"')[0]    # everything before the code pane
+    assert "Interpretation prose." in text           # markdown rendered
+    assert "secret = compute()" not in prose         # code absent from the prose view
+    assert "secret = compute()" in text              # but available in the hidden code pane
     assert "reports/cov2d/figures/plot.png" in text  # image path rewritten to report dir
     assert "COV2D" in text                            # series-linked title
 
@@ -138,6 +140,78 @@ def test_report_card_shows_stale_badge(tmp_path):
     text = generate_reports(tmp_path).read_text()
     assert "stale" in text.lower()
     assert out_rel in text  # the produced artifact is listed in the footer
+
+
+def test_render_notebook_full_renders_code_and_outputs():
+    from eln.generators.reports import render_notebook_full
+    nb = _nb([
+        {"cell_type": "markdown", "source": ["## Heading\n"]},
+        {"cell_type": "code", "execution_count": 3,
+         "source": ["secret = compute()\n"],
+         "outputs": [
+             {"output_type": "stream", "name": "stdout", "text": ["done\n"]},
+             {"output_type": "execute_result",
+              "data": {"text/plain": ["42"]}, "execution_count": 3},
+         ]},
+    ])
+    html = render_notebook_full(nb, "reports/cov2d")
+    assert "secret = compute()" in html   # code source shown
+    assert "In [3]:" in html              # execution prompt
+    assert "done" in html                 # stream output
+    assert "42" in html                   # execute_result text
+    assert "Heading" in html              # markdown cell still rendered
+
+
+def test_render_output_image_and_html():
+    from eln.generators.reports import render_output
+    img = render_output(
+        {"output_type": "display_data", "data": {"image/png": "QUJD"}},
+        "reports/x")
+    assert 'src="data:image/png;base64,QUJD"' in img
+    html = render_output(
+        {"output_type": "execute_result",
+         "data": {"text/html": "<table><tr><td>1</td></tr></table>",
+                  "text/plain": ["fallback"]}},
+        "reports/x")
+    assert "<table>" in html               # rich html preferred over text/plain
+    assert "fallback" not in html
+
+
+def test_render_output_strips_ansi_in_traceback():
+    from eln.generators.reports import render_output
+    out = render_output(
+        {"output_type": "error", "ename": "ValueError", "evalue": "x",
+         "traceback": ["\x1b[0;31mValueError\x1b[0m: boom"]},
+        "reports/x")
+    assert "ValueError: boom" in out
+    assert "\x1b[" not in out
+
+
+def test_notebook_report_has_code_toggle(tmp_path):
+    from eln.generators.reports import generate_reports
+    _make_db_with_codes(tmp_path / "experiments.db", ["COV2D"])
+    _write_nb(tmp_path / "reports" / "cov2d" / "report.ipynb", [
+        {"cell_type": "markdown",
+         "source": ["# COV2D\n", "**Series:** COV2D\n", "\nProse.\n"]},
+        {"cell_type": "code", "source": ["secret = compute()\n"], "outputs": []},
+    ])
+    text = generate_reports(tmp_path).read_text()
+    # Report view still hides the code; the Code pane reveals it.
+    assert "report-code" in text          # hidden code pane present
+    assert "setReportView" in text        # toggle wired
+    assert ">Code<" in text               # toggle button label
+    assert "secret = compute()" in text   # source available in code pane
+
+
+def test_markdown_report_has_no_code_toggle(tmp_path):
+    from eln.generators.reports import generate_reports
+    _make_db_with_codes(tmp_path / "experiments.db", ["COV2D"])
+    (tmp_path / "reports").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "reports" / "note.md").write_text("# Note\n\nJust prose.\n")
+    text = generate_reports(tmp_path).read_text()
+    assert "Just prose." in text
+    assert 'class="report-code"' not in text   # no code pane for markdown reports
+    assert "setReportView('note'" not in text  # no toggle for this card
 
 
 def test_generate_skips_malformed_notebook(tmp_path):

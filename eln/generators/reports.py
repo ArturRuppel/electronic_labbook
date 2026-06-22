@@ -231,6 +231,116 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
             border-top: 1px solid #e0e5e9;
             margin: 0 1rem;
         }}
+        .report-view-toggle {{
+            display: inline-flex;
+            margin: 1rem 0 0.25rem 0;
+            border: 1px solid #cfd7de;
+            border-radius: 6px;
+            overflow: hidden;
+        }}
+        .view-btn {{
+            background: white;
+            border: none;
+            color: #53616d;
+            font: inherit;
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 0.3rem 0.9rem;
+            cursor: pointer;
+        }}
+        .view-btn + .view-btn {{
+            border-left: 1px solid #cfd7de;
+        }}
+        .view-btn:hover {{
+            background: #f3f6f8;
+        }}
+        .view-btn.active {{
+            background: #286b9f;
+            color: white;
+        }}
+        .report-code {{
+            margin-top: 0.5rem;
+        }}
+        .report-code .nb-md {{
+            line-height: 1.8;
+        }}
+        .nb-cell {{
+            margin: 0.75rem 0;
+        }}
+        .nb-in {{
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-start;
+        }}
+        .nb-prompt {{
+            flex: 0 0 auto;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.78rem;
+            color: #2b5878;
+            padding-top: 0.7rem;
+            user-select: none;
+        }}
+        .nb-code {{
+            flex: 1 1 auto;
+            min-width: 0;
+            background: #f3f6f8;
+            border: 1px solid #e0e5e9;
+            border-radius: 6px;
+            padding: 0.6rem 0.8rem;
+            margin: 0;
+            overflow-x: auto;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }}
+        .nb-code code {{
+            background: none;
+            padding: 0;
+            font: inherit;
+        }}
+        .nb-outputs {{
+            margin: 0.35rem 0 0 2.5rem;
+        }}
+        .nb-stream, .nb-out-text, .nb-error {{
+            background: #fbfcfd;
+            border: 1px solid #eef1f4;
+            border-radius: 6px;
+            padding: 0.5rem 0.7rem;
+            margin: 0.3rem 0;
+            overflow-x: auto;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.82rem;
+            line-height: 1.45;
+            white-space: pre-wrap;
+        }}
+        .nb-stderr {{
+            background: #fdf3f3;
+            border-color: #f0dcdc;
+            color: #8a3b3b;
+        }}
+        .nb-error {{
+            background: #fdf3f3;
+            border-color: #f0dcdc;
+            color: #8a3b3b;
+        }}
+        .nb-out-img {{
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0.3rem 0;
+        }}
+        .nb-out-html {{
+            overflow-x: auto;
+            margin: 0.3rem 0;
+            font-size: 0.85rem;
+        }}
+        .nb-out-html table {{
+            border-collapse: collapse;
+        }}
+        .nb-out-html th, .nb-out-html td {{
+            border: 1px solid #e0e5e9;
+            padding: 0.25rem 0.5rem;
+        }}
         .no-reports {{
             text-align: center;
             padding: 3rem;
@@ -394,6 +504,18 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
                 details.style.display = 'none';
                 icon.style.transform = 'rotate(0deg)';
             }}
+        }}
+
+        function setReportView(slug, mode) {{
+            const view = document.getElementById('view-' + slug);
+            const code = document.getElementById('code-' + slug);
+            const btnReport = document.getElementById('btn-report-' + slug);
+            const btnCode = document.getElementById('btn-code-' + slug);
+            const showCode = mode === 'code';
+            view.style.display = showCode ? 'none' : 'block';
+            code.style.display = showCode ? 'block' : 'none';
+            btnReport.classList.toggle('active', !showCode);
+            btnCode.classList.toggle('active', showCode);
         }}
 
         window.addEventListener('DOMContentLoaded', function() {{
@@ -727,6 +849,108 @@ def notebook_markdown(nb):
     return "\n\n".join(parts)
 
 
+def _rewrite_relative_images(content, report_dir):
+    """Rewrite relative markdown image paths to be relative to the catalog dir.
+
+    ``![alt](figures/x.png)`` in a report at ``reports/cov2d/`` becomes
+    ``![alt](reports/cov2d/figures/x.png)``. Absolute and ``http(s)`` URLs are
+    left untouched. Shared by the prose view and per-cell code-view rendering.
+    """
+    return re.sub(
+        r'!\[([^\]]*)\]\((?!http|/)([^\)]+)\)',
+        lambda m: f'![{m.group(1)}]({report_dir}/{m.group(2)})',
+        content,
+    )
+
+
+_ANSI_RE = re.compile(r'\x1b\[[0-9;?]*[ -/]*[@-~]')
+
+
+def _cell_source(cell):
+    """A notebook cell's source as a single string (source may be list or str)."""
+    source = cell.get("source", [])
+    return "".join(source) if isinstance(source, list) else (source or "")
+
+
+def _escape(text):
+    """HTML-escape text for safe display inside <pre>/<code>."""
+    return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def _mime_data(data, mime):
+    """A MIME payload from an output's ``data`` dict as a string (joins lists)."""
+    value = data.get(mime)
+    if value is None:
+        return None
+    return "".join(value) if isinstance(value, list) else value
+
+
+def render_output(out, report_dir):
+    """Render one notebook code-cell output to HTML for the full-notebook view.
+
+    Handles the output kinds emitted by Jupyter: ``stream`` (stdout/stderr),
+    ``error`` (traceback, ANSI stripped) and ``execute_result`` / ``display_data``
+    (rich MIME bundles). For rich outputs, ``image/png`` and ``image/jpeg`` render
+    as inline base64 ``<img>``; ``text/html`` is embedded as-is (these are the
+    lab's own notebooks, trusted); otherwise ``text/plain`` falls back to a
+    ``<pre>``. Unknown output types render nothing.
+    """
+    otype = out.get("output_type")
+    if otype == "stream":
+        text = "".join(out.get("text", []))
+        cls = "nb-stream nb-stderr" if out.get("name") == "stderr" else "nb-stream"
+        return f'<pre class="{cls}">{_escape(text)}</pre>'
+    if otype == "error":
+        tb = _ANSI_RE.sub('', "\n".join(out.get("traceback", [])))
+        return f'<pre class="nb-error">{_escape(tb)}</pre>'
+    if otype in ("execute_result", "display_data"):
+        data = out.get("data", {})
+        for mime in ("image/png", "image/jpeg"):
+            payload = _mime_data(data, mime)
+            if payload is not None:
+                b64 = "".join(payload.split())
+                return (f'<img class="nb-out-img" src="data:{mime};base64,{b64}" '
+                        f'alt="output">')
+        html = _mime_data(data, "text/html")
+        if html is not None:
+            return f'<div class="nb-out-html">{html}</div>'
+        plain = _mime_data(data, "text/plain")
+        if plain is not None:
+            return f'<pre class="nb-out-text">{_escape(plain)}</pre>'
+    return ""
+
+
+def render_notebook_full(nb, report_dir):
+    """Render a full notebook (markdown + code + outputs, in cell order) to HTML.
+
+    This is the "Code" view of a notebook report: a faithful, top-to-bottom
+    rendering. Markdown cells go through the same pipeline as a ``.md`` report
+    (relative images rewritten); code cells show an ``In [n]:`` prompt with the
+    source and each cell's outputs. The ``{{experiments}}`` series block is *not*
+    injected here — the Code view shows the notebook as written.
+    """
+    parts = []
+    for cell in nb.get("cells", []):
+        ctype = cell.get("cell_type")
+        if ctype == "markdown":
+            md = _rewrite_relative_images(_cell_source(cell), report_dir)
+            parts.append(f'<div class="nb-md">{markdown_to_html(md)}</div>')
+        elif ctype == "code":
+            source = _cell_source(cell)
+            count = cell.get("execution_count")
+            prompt = f"In [{count}]:" if count is not None else "In [ ]:"
+            outputs = "".join(
+                render_output(o, report_dir) for o in cell.get("outputs", []))
+            outputs_html = f'<div class="nb-outputs">{outputs}</div>' if outputs else ""
+            parts.append(
+                f'<div class="nb-cell">'
+                f'<div class="nb-in">'
+                f'<span class="nb-prompt">{prompt}</span>'
+                f'<pre class="nb-code"><code>{_escape(source)}</code></pre>'
+                f'</div>{outputs_html}</div>')
+    return "\n".join(parts)
+
+
 def report_provenance(root):
     """Map each report's path to its produced artifacts and their status, from the
     SDGL ``generates`` stamps. Keyed by the stamp's recorded ``notebook.path``
@@ -841,6 +1065,7 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
         provenance = report_provenance(root)
         reports_html_list = []
         for report_file in report_files:
+            nb = None
             if report_file.suffix == ".ipynb":
                 try:
                     nb = json.loads(report_file.read_text())
@@ -853,11 +1078,7 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
 
             # Fix relative image paths to be relative to catalog directory
             report_dir = report_file.parent.relative_to(root)
-            content = re.sub(
-                r'!\[([^\]]*)\]\((?!http|/)([^\)]+)\)',
-                lambda m: f'![{m.group(1)}]({report_dir}/{m.group(2)})',
-                content
-            )
+            content = _rewrite_relative_images(content, report_dir)
 
             html_content = markdown_to_html(content)
 
@@ -902,6 +1123,27 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
 
             rel_src = report_file.relative_to(root).as_posix()
             footer = _provenance_footer(provenance.get(rel_src, []))
+
+            # Notebook reports carry a hidden full-notebook "Code" view (code +
+            # outputs) plus a Report/Code toggle. Markdown reports have no code,
+            # so they render the prose view alone with no toggle.
+            if nb is not None:
+                code_html = render_notebook_full(nb, report_dir)
+                toggle = f"""
+                        <div class="report-view-toggle">
+                            <button type="button" class="view-btn active" id="btn-report-{slug}"
+                                    onclick="setReportView('{slug}', 'report')">Report</button>
+                            <button type="button" class="view-btn" id="btn-code-{slug}"
+                                    onclick="setReportView('{slug}', 'code')">Code</button>
+                        </div>"""
+                code_pane = f"""
+                        <div class="report-code" id="code-{slug}" style="display: none;">
+                            {code_html}
+                        </div>"""
+            else:
+                toggle = ""
+                code_pane = ""
+
             reports_html_list.append(f"""
                 <div class="report-card" id="report-{slug}" data-report-src="{rel_src}">
                     <div class="report-header" onclick="toggleReport('{slug}')">
@@ -911,11 +1153,13 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
                         </div>
                         <div class="report-date">{report_date}</div>
                     </div>
-                    <div class="report-details" id="details-{slug}">
-                        <div class="report-content">
-                            {html_content}
-                        </div>
-                        {footer}
+                    <div class="report-details" id="details-{slug}">{toggle}
+                        <div class="report-view" id="view-{slug}">
+                            <div class="report-content">
+                                {html_content}
+                            </div>
+                            {footer}
+                        </div>{code_pane}
                     </div>
                 </div>
             """)
