@@ -27,3 +27,18 @@ def test_render_nav_appends_plugin_links():
     out = render_nav([extra])
     assert '<a href="/">Data Graph</a>' in out          # core preserved
     assert '<a href="widgets.html">Widgets</a>' in out   # plugin appended
+
+
+def test_sdgl_static_nav_matches_render_nav():
+    """The SDGL viewer (served at /) is a static page with a hand-coded nav, not
+    render_nav output. Keep its link set in sync with the canonical nav so new
+    pages/plugins (e.g. Documents, Code) appear there too instead of silently
+    drifting — which is exactly how the Code tab went missing from the / page."""
+    import re
+    from pathlib import Path
+
+    sdgl = (Path(__file__).resolve().parents[2] / "catalog" / "sdgl.html").read_text()
+    static_block = re.search(r'<nav class="nav">(.*?)</nav>', sdgl, re.DOTALL).group(1)
+    static_hrefs = re.findall(r'href="([^"]+)"', static_block)
+    canonical_hrefs = re.findall(r'href="([^"]+)"', render_nav())
+    assert static_hrefs == canonical_hrefs
