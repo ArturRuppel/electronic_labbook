@@ -22,10 +22,36 @@ DEFAULT_DB_NAME = "experiments.db"
 DEFAULT_SDGL_DB_NAME = "sdgl.db"
 
 
+def _slugify(text):
+    """GitHub-style heading slug: lowercase, drop punctuation (keep word chars,
+    spaces, hyphens), collapse whitespace to single hyphens. Used to give every
+    heading an ``id`` so in-page ``[text](#slug)`` links resolve."""
+    # Headings are HTML-escaped before this runs, so drop entities (&amp; etc.)
+    # first — otherwise "&amp;" leaks the letters "amp" into the slug.
+    text = re.sub(r'&[a-z]+;', ' ', text.lower())
+    slug = re.sub(r'[^\w\s-]', '', text)
+    return re.sub(r'\s+', '-', slug.strip())
+
+
 def markdown_to_html(text):
     """Simple markdown to HTML converter."""
     if not text:
         return ""
+
+    # Protect LaTeX math from the markdown passes below ($$...$$ display, $...$
+    # inline). The raw spans are stashed behind NUL-delimited placeholders (which
+    # no markdown rule touches), the markdown transforms run, then the spans are
+    # restored — with only &<> escaped so the HTML stays valid — for MathJax to
+    # typeset client-side. As in Jupyter, $ now delimits math in a report; write
+    # a literal dollar as \$.
+    math = []
+
+    def _stash(m):
+        math.append(m.group(0))
+        return f'\x00MATH{len(math) - 1}\x00'
+
+    text = re.sub(r'(?<!\\)\$\$.+?\$\$', _stash, text, flags=re.DOTALL)
+    text = re.sub(r'(?<![\w\\$])\$(?!\s)[^$\n]+?(?<!\s)\$(?![\w$])', _stash, text)
 
     # Escape HTML
     text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
@@ -41,11 +67,11 @@ def markdown_to_html(text):
     # Links
     text = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', r'<a href="\2">\1</a>', text)
 
-    # Headers
-    text = re.sub(r'^#### (.+)$', r'<h4>\1</h4>', text, flags=re.MULTILINE)
-    text = re.sub(r'^### (.+)$', r'<h3>\1</h3>', text, flags=re.MULTILINE)
-    text = re.sub(r'^## (.+)$', r'<h2>\1</h2>', text, flags=re.MULTILINE)
-    text = re.sub(r'^# (.+)$', r'<h1>\1</h1>', text, flags=re.MULTILINE)
+    # Headers — each gets a slug id so in-page anchor links ([text](#slug)) resolve.
+    def _header(m):
+        level, body = len(m.group(1)), m.group(2).strip()
+        return f'<h{level} id="{_slugify(body)}">{body}</h{level}>'
+    text = re.sub(r'^(#{1,4}) (.+)$', _header, text, flags=re.MULTILINE)
 
     # Bold and italic
     text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
@@ -68,10 +94,17 @@ def markdown_to_html(text):
     text = re.sub(r'\n\n+', '</p><p>', text)
     text = '<p>' + text + '</p>'
 
-    # Clean up empty paragraphs around block elements
-    text = re.sub(r'<p>(</?(?:h[1-6]|ul|blockquote|img)>)', r'\1', text)
-    text = re.sub(r'(</?(?:h[1-6]|ul|blockquote)>)</p>', r'\1', text)
+    # Clean up empty paragraphs around block elements (tolerate tag attributes,
+    # e.g. headings now carry an id="...").
+    text = re.sub(r'<p>(</?(?:h[1-6]|ul|blockquote|img)(?:\s[^>]*)?>)', r'\1', text)
+    text = re.sub(r'(</?(?:h[1-6]|ul|blockquote)(?:\s[^>]*)?>)</p>', r'\1', text)
     text = re.sub(r'<p>\s*</p>', '', text)
+
+    # Restore protected math (escape only &<> so the HTML stays valid; MathJax
+    # reads the decoded text content).
+    for i, raw in enumerate(math):
+        esc = raw.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        text = text.replace(f'\x00MATH{i}\x00', esc)
 
     return text
 
@@ -480,6 +513,13 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
             margin-top: 2rem;
         }}
     </style>
+    <script>
+      window.MathJax = {{
+        tex: {{ inlineMath: [['$', '$']], displayMath: [['$$', '$$']] }},
+        options: {{ skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }}
+      }};
+    </script>
+    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
     <script src="auth.js"></script>

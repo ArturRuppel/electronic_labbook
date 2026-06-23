@@ -356,7 +356,8 @@ def test_report_card_title_uses_series_identity(data_root, tmp_path):
     # tfm_progress.md declares '**Series:** TFMSP'; TFMSP -> 'Traction Force'.
     assert "TFMSP — Traction Force" in html
     # The free-form H1 still renders in the body, just not as the header title.
-    assert "<h1>TFM progress</h1>" in html
+    # (Headings now carry a slug id so in-page anchor links resolve.)
+    assert '<h1 id="tfm-progress">TFM progress</h1>' in html
     # notes.md has no series, so it falls back to its H1.
     assert "Random notes" in html
 

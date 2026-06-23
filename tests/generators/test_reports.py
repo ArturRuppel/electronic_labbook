@@ -55,6 +55,36 @@ def test_notebook_markdown_source_as_string():
     assert "plain string" in notebook_markdown(nb)
 
 
+from eln.generators.reports import markdown_to_html
+
+
+def test_headings_get_slug_ids():
+    # Every heading carries a GitHub-style slug id so in-page anchor links resolve.
+    assert '<h3 id="contact-type-permutation-null">' in markdown_to_html(
+        "### Contact-type permutation null")
+    assert '<h2 id="methods-reproducibility">' in markdown_to_html(
+        "## Methods & reproducibility")
+
+
+def test_in_page_anchor_link_matches_heading_id():
+    # The link fragment and the heading id agree, so [text](#slug) jumps in-page.
+    page = (markdown_to_html("see [the null](#contact-type-permutation-null)")
+            + markdown_to_html("### Contact-type permutation null"))
+    assert 'href="#contact-type-permutation-null"' in page
+    assert 'id="contact-type-permutation-null"' in page
+
+
+def test_latex_math_survives_markdown_passes():
+    # Math is protected from *emphasis* / `code` / HTML-escaping so MathJax can
+    # typeset it client-side. The raw LaTeX must come through verbatim.
+    display = markdown_to_html(r"take $$\log_2\left(\frac{a}{b}\right)$$ here")
+    assert r"$$\log_2\left(\frac{a}{b}\right)$$" in display
+    # underscores and braces must not be mangled into emphasis/etc.
+    inline = markdown_to_html(r"chance is $\log_2 1 = 0$ exactly")
+    assert r"$\log_2 1 = 0$" in inline
+    assert "<em>" not in inline and "<strong>" not in inline
+
+
 import json as _json
 import sqlite3
 
