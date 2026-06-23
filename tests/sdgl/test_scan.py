@@ -266,3 +266,49 @@ def test_sync_reports_prunes_deleted_notebook(data_root):
     conn = sqlite3.connect(db)
     assert conn.execute("SELECT COUNT(*) FROM reports WHERE file_path = 'reports/note.ipynb'").fetchone()[0] == 0
     conn.close()
+
+
+def test_sync_reports_renamed_file_does_not_duplicate_node(data_root):
+    """Renaming a report file must not leave an orphan graph node behind.
+
+    A rename inserts a new report row (new id -> new node) for the new path; the
+    old row is pruned, so the per-row prune can't reach the old node. The graph
+    must still end with exactly one report node + one has_report edge per series,
+    not a duplicate listing.
+    """
+    root, db, _ = data_root
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO experiment_codes (title, code) VALUES ('Coverage', 'COV2D')")
+    conn.execute("INSERT INTO experiments (experiment_type, repetition, excluded, file_path) "
+                 "VALUES ('Coverage', 1, 0, 'x')")
+    conn.commit()
+    conn.close()
+
+    old = root / "reports" / "auto"
+    old.mkdir(parents=True)
+    (old / "COV2D.md").write_text("# COV2D\n\n**Series:** COV2D\n\n{{experiments}}\n")
+    SDGL(root).scan_from_config()
+
+    # Rename: reports/auto/COV2D.md -> reports/COV2D/COV2D.md
+    new = root / "reports" / "COV2D"
+    new.mkdir(parents=True)
+    (new / "COV2D.md").write_text((old / "COV2D.md").read_text())
+    (old / "COV2D.md").unlink()
+    old.rmdir()
+    SDGL(root).scan_from_config()
+
+    sdgl = SDGL(root)
+    c = sdgl.connect()
+    report_nodes = c.execute("SELECT COUNT(*) FROM nodes WHERE id LIKE 'report:%'").fetchone()[0]
+    has_report = c.execute(
+        "SELECT COUNT(*) FROM edges WHERE relation_type = 'has_report' "
+        "AND source_id = 'experiment:COV2D-01'"
+    ).fetchone()[0]
+    c.close()
+    assert report_nodes == 1   # the renamed report, not the old orphan too
+    assert has_report == 1     # listed once, not twice
+
+    conn = sqlite3.connect(db)
+    paths = [r[0] for r in conn.execute("SELECT file_path FROM reports")]
+    conn.close()
+    assert paths == ["reports/COV2D/COV2D.md"]

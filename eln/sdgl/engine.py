@@ -607,8 +607,10 @@ class SDGL:
             and not any(_is_hidden(part) for part in p.relative_to(reports_dir).parts)
         )
 
-        # Track which reports exist for pruning
+        # Track which reports exist for pruning — by ELN path (to prune stale ELN
+        # rows) and by SDGL node id (to prune orphan graph nodes; see below).
         seen_report_paths = set()
+        seen_report_node_ids = set()
 
         for report_file in report_files:
             rel_path = str(report_file.relative_to(self.root_path))
@@ -619,6 +621,11 @@ class SDGL:
             content = _report_text(report_file)
             if content is None:
                 seen_report_paths.add(rel_path)
+                existing = eln.execute(
+                    "SELECT id FROM reports WHERE file_path = ?", (rel_path,)
+                ).fetchone()
+                if existing:
+                    seen_report_node_ids.add("report:" + str(existing["id"]))
                 continue
             seen_report_paths.add(rel_path)
 
@@ -659,6 +666,7 @@ class SDGL:
 
             # Clear existing report-experiment edges for this report (will be recreated below)
             report_node_id = "report:" + str(report_id)
+            seen_report_node_ids.add(report_node_id)
             conn.execute("DELETE FROM edges WHERE target_id = ? AND relation_type = 'has_report'", (report_node_id,))
 
             # Link the report to every active repetition of its declared series
@@ -678,16 +686,27 @@ class SDGL:
                             conn=conn,
                         )
 
-        # Prune reports that no longer exist
+        # Prune stale ELN report rows (file no longer present).
         for row in eln.execute("SELECT id, file_path FROM reports"):
-            report_node_id = "report:" + str(row["id"])
             if row["file_path"] not in seen_report_paths:
-                # Report file deleted - remove everything
                 eln.execute("DELETE FROM experiment_reports WHERE report_id = ?", (row["id"],))
                 eln.execute("DELETE FROM reports WHERE id = ?", (row["id"],))
-                conn.execute("DELETE FROM edges WHERE source_id = ? OR target_id = ?",
-                           (report_node_id, report_node_id))
-                conn.execute("DELETE FROM nodes WHERE id = ?", (report_node_id,))
+
+        # Self-heal the SDGL graph: the only valid report nodes are the ones synced
+        # this pass. Anything else under the 'report:' namespace is an orphan — most
+        # commonly left behind when a report file is renamed, which inserts a new
+        # row (new id -> new node) for the new path while the old row is pruned, so
+        # the per-row loop above can never reach the old node. Delete orphan report
+        # nodes and their edges directly, keyed on the node table rather than the
+        # ELN rows, so a rename can't leave a duplicate in the graph.
+        orphan_report_nodes = [
+            r["id"] for r in conn.execute("SELECT id FROM nodes WHERE id LIKE 'report:%'")
+            if r["id"] not in seen_report_node_ids
+        ]
+        for node_id in orphan_report_nodes:
+            conn.execute("DELETE FROM edges WHERE source_id = ? OR target_id = ?",
+                         (node_id, node_id))
+            conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
 
         eln.commit()
 

@@ -396,10 +396,11 @@
         function linkRow(link, key) {
             // Reports get special treatment - show with document icon and direct link
             if (link.type === 'report') {
+                // The report hangs directly under its series, whose title it would
+                // just repeat — label it generically ("Report") instead.
                 const row = makeRow({
                     twisty: false, color: '#2b7a5f', icon: '📄',
-                    label: `${escapeHtml(link.title || link.node_id)}`,
-                    meta: 'report'
+                    label: 'Report'
                 });
                 // Click opens the report in reports.html. The fragment must be
                 // the filename slug (reports.html anchors are `report-<slug>`),
