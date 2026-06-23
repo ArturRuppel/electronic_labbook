@@ -1425,16 +1425,25 @@ class SDGL:
             if other.startswith("experiment:"):
                 continue
             other_node = conn.execute(
-                "SELECT type, title FROM nodes WHERE id = ?", (other,)
+                "SELECT type, title, metadata FROM nodes WHERE id = ?", (other,)
             ).fetchone()
             if not other_node:
                 continue
-            entities.append({
+            entity = {
                 "node_id": other,
                 "type": other_node["type"],
                 "title": other_node["title"],
                 "relation": edge["relation_type"],
-            })
+            }
+            # Reports are addressed in reports.html by their filename slug
+            # (the card id is ``report-<stem>``), not by the numeric DB id in
+            # the node_id. Surface the slug so the explorer can deep-link.
+            if other_node["type"] == "report":
+                meta = json_loads(other_node["metadata"])
+                file_path = meta.get("file_path")
+                if file_path:
+                    entity["slug"] = file_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            entities.append(entity)
         entities.sort(key=lambda item: (item["type"], item["title"] or item["node_id"]))
         return entities
 

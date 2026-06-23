@@ -441,9 +441,12 @@
                     label: `${escapeHtml(link.title || link.node_id)}`,
                     meta: `report · ${link.relation}`
                 });
-                // Click opens the report in reports.html
+                // Click opens the report in reports.html. The fragment must be
+                // the filename slug (reports.html anchors are `report-<slug>`),
+                // not the numeric DB id embedded in node_id.
                 row.addEventListener('click', () => {
-                    window.open(`reports.html#${(link.node_id || '').split(':', 2)[1]}`, '_blank');
+                    const frag = link.slug || (link.node_id || '').split(':', 2)[1];
+                    window.open(`reports.html#${frag}`, '_blank');
                 }, true);
                 return wrapLeaf(row);
             }
@@ -647,7 +650,7 @@
         function catalogHref(link) {
             const id = (link.node_id || '').split(':', 2)[1];
             if (link.type === 'protocol') return `protocols.html#${id}`;
-            if (link.type === 'report') return 'reports.html';
+            if (link.type === 'report') return link.slug ? `reports.html#${link.slug}` : 'reports.html';
             if (link.type === 'presentation') return 'presentations.html';
             return null;
         }
