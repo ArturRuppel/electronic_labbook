@@ -409,6 +409,30 @@ def test_presentations_html_is_a_generated_page(tmp_path):
     assert b"P" in resp.data
 
 
+def test_documents_static_mount_serves_file(tmp_path):
+    """The documents plugin's StaticMount serves document media under its prefix."""
+    from eln.server import create_app
+    doc = tmp_path / "repo" / "documents" / "2026-05-05_thread"
+    doc.mkdir(parents=True)
+    (doc / "post1.png").write_bytes(b"PNGDATA")
+    client = create_app(tmp_path / "repo").test_client()
+    resp = client.get("/documents/2026-05-05_thread/post1.png")
+    assert resp.status_code == 200
+    assert b"PNGDATA" in resp.data
+
+
+def test_documents_html_is_a_generated_page(tmp_path):
+    """documents.html is served as a generated page via the plugin's nav href."""
+    from eln.server import create_app
+    catalog = tmp_path / "repo" / "catalog"
+    catalog.mkdir(parents=True)
+    (catalog / "documents.html").write_text("<html><body>D</body></html>")
+    client = create_app(tmp_path / "repo").test_client()
+    resp = client.get("/documents.html")
+    assert resp.status_code == 200
+    assert b"D" in resp.data
+
+
 # --- export -----------------------------------------------------------------
 
 def test_api_export_start_all(tmp_path):

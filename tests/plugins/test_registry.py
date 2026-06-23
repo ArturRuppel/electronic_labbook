@@ -15,6 +15,20 @@ def test_presentations_declares_nav_and_generator():
     assert callable(pres.generate)
 
 
+def test_builtin_includes_documents():
+    names = {p.name for p in discover_plugins()}
+    assert "documents" in names
+
+
+def test_documents_declares_nav_generator_and_mount():
+    docs = next(p for p in discover_plugins() if p.name == "documents")
+    assert isinstance(docs.nav, NavLink)
+    assert docs.nav.href == "documents.html"
+    assert callable(docs.generate)
+    assert docs.static_mount is not None
+    assert docs.static_mount.url_prefix == "documents"
+
+
 def test_entry_point_plugins_are_merged(monkeypatch):
     extra = Plugin(name="widgets", nav=NavLink("Widgets", "widgets.html"))
 

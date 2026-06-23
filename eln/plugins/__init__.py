@@ -54,10 +54,10 @@ class Plugin:
 
 def _builtin_plugins() -> list:
     """The in-tree plugins. Imported lazily to avoid an import cycle (the
-    presentations plugin imports names from this module)."""
-    from eln.plugins import presentations
+    plugins import names from this module)."""
+    from eln.plugins import documents, presentations
 
-    return [presentations.plugin]
+    return [presentations.plugin, documents.plugin]
 
 
 def _entry_point_plugins() -> list:
