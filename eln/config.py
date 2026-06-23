@@ -10,8 +10,15 @@ directory containing ``pyproject.toml``), overridable by ``--config`` /
 from __future__ import annotations
 
 import os
+import threading
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Resolving a scan root that points at a dead network mount (e.g. an unreachable
+# CIFS share) blocks indefinitely in realpath. Cap each resolve at this many
+# seconds, then fall back to a non-blocking normalization (see _resolve_path).
+_RESOLVE_TIMEOUT = 3.0
 
 try:  # Python 3.11+
     import tomllib
@@ -53,6 +60,42 @@ def find_config_path() -> Path:
     )
 
 
+def _resolve_path(p, timeout=_RESOLVE_TIMEOUT):
+    """Resolve *p* (symlinks + absolute) without ever hanging on a dead mount.
+
+    ``Path.resolve()`` calls ``realpath``, which blocks indefinitely when a path
+    sits on an unreachable network mount — wedging *every* CLI command at config
+    load, even ones (like ``regenerate``) that never touch the scan roots. Run the
+    resolve in a daemon thread and give it *timeout* seconds; if it doesn't return,
+    fall back to a non-blocking ``os.path.abspath`` normalization and warn, so a
+    flaky scan root degrades to 'unresolved' instead of freezing the process. The
+    abandoned thread is a daemon, so it never blocks interpreter exit.
+    """
+    result = {}
+
+    def _work():
+        try:
+            result["path"] = p.resolve()
+        except OSError as exc:  # resolve can raise on permission/loop errors
+            result["error"] = exc
+
+    worker = threading.Thread(target=_work, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if "path" in result:
+        return result["path"]
+
+    fallback = Path(os.path.abspath(p))
+    if worker.is_alive():
+        warnings.warn(
+            f"scan root {p} is unreachable (resolve exceeded {timeout}s, likely a "
+            f"dead network mount); using the unresolved path {fallback}")
+    else:
+        warnings.warn(f"could not resolve scan root {p}: {result.get('error')}; "
+                      f"using {fallback}")
+    return fallback
+
+
 def load_config(config_path=None, *, root_override=None) -> Config:
     """Parse the unified config into a :class:`Config`.
 
@@ -78,7 +121,7 @@ def load_config(config_path=None, *, root_override=None) -> Config:
         p = Path(entry["path"]).expanduser()
         if not p.is_absolute():
             p = data_root / p
-        scan_roots.append({"name": entry.get("name"), "path": p.resolve()})
+        scan_roots.append({"name": entry.get("name"), "path": _resolve_path(p)})
 
     # Channel fungibility: equivalence groups of interchangeable markers
     # (e.g. ["GFP", "488", "FITC"]); the first member is canonical.

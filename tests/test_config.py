@@ -1,8 +1,9 @@
 import os
+import time
 import pytest
 from pathlib import Path
 
-from eln.config import Config, find_config_path, load_config
+from eln.config import Config, _resolve_path, find_config_path, load_config
 
 
 def _write_config(tmp_path, data_root, extra=""):
@@ -118,6 +119,49 @@ def test_resolve_timestamp_config_fills_defaults():
     assert cfg["tsa_url"] == DEFAULT_TSA_URL
     assert isinstance(cfg["cert_bytes"], bytes) and cfg["cert_bytes"]
     assert "experiments.sql" in cfg["paths"]
+
+
+def test_resolve_path_returns_resolved_when_fast(tmp_path):
+    # A reachable path resolves exactly as Path.resolve() would (symlinks + absolute).
+    assert _resolve_path(tmp_path / "sub" / "..") == (tmp_path / "sub" / "..").resolve()
+
+
+def test_resolve_path_times_out_to_abspath(tmp_path, monkeypatch, recwarn):
+    # Simulate a dead mount: resolve() blocks. The helper must not hang — it falls
+    # back to a non-blocking abspath normalization and warns.
+    monkeypatch.setattr(Path, "resolve", lambda self, *a, **k: time.sleep(30) or self)
+    p = tmp_path / "gaia" / "share"
+    started = time.monotonic()
+    out = _resolve_path(p, timeout=0.05)
+    assert time.monotonic() - started < 5          # returned promptly, did not hang
+    assert out == Path(os.path.abspath(p))         # non-blocking fallback
+    assert any("unreachable" in str(w.message) for w in recwarn.list)
+
+
+def test_load_config_does_not_hang_on_dead_scan_root(tmp_path, monkeypatch):
+    # End to end: a scan root whose resolve blocks must not wedge load_config.
+    # Only the dead /gaia path stalls; the local data_root still resolves normally.
+    real_resolve = Path.resolve
+
+    def fake_resolve(self, *args, **kwargs):
+        if "gaia" in str(self):
+            time.sleep(30)
+            return self
+        return real_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", fake_resolve)
+    data = tmp_path / "data-repo"
+    data.mkdir()
+    cfg = tmp_path / "labbook.toml"
+    cfg.write_text(
+        f'data_root = "{data}"\n\n'
+        '[[scan_roots]]\nname = "dead"\npath = "/gaia/unreachable/share"\n',
+        encoding="utf-8")
+    started = time.monotonic()
+    c = load_config(cfg, root_override=str(data))
+    assert time.monotonic() - started < 5          # did not hang on the dead root
+    assert c.scan_roots[0]["name"] == "dead"
+    assert str(c.scan_roots[0]["path"]) == os.path.abspath("/gaia/unreachable/share")
 
 
 def test_find_config_path_uses_env_override(tmp_path, monkeypatch):
