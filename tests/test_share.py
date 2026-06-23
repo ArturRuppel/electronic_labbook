@@ -216,7 +216,6 @@ def test_export_all_writes_static_sdgl_snapshot(data_root, tmp_path):
     assert embedded, "snapshot must be embedded inline in the page"
     snapshot = json.loads(embedded.group(1))
     assert "experiments" in snapshot["tree"]         # same shape as /api/sdgl/tree
-    assert "unmatched" in snapshot
     # The TFMSP series scanned into the fixture surfaces in the snapshot.
     assert any(g.get("code") == "TFMSP" for g in snapshot["tree"]["experiments"])
 

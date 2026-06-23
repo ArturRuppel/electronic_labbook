@@ -1,5 +1,5 @@
 """SDGL engine: naming grammar + scan, with the debugged refinements as
-acceptance criteria (materialized raw-only start_date, hidden-folder exclusion)."""
+acceptance criteria (raw-only date derivation, hidden-folder exclusion)."""
 
 import os
 import sqlite3
@@ -90,23 +90,52 @@ def data_root(tmp_path, monkeypatch):
     return root, db, expected
 
 
-def test_scan_recognizes_and_materializes_dates(data_root):
+def test_scan_recognizes_folders(data_root):
     root, db, expected = data_root
     summary = SDGL(root).scan_from_config()
 
     assert summary["recognized"] == 2     # TFMSP-01, TFMSP-02
     assert summary["aggregates"] == 1     # bare TFMSP folder
 
-    conn = sqlite3.connect(db)
-    conn.row_factory = sqlite3.Row
-    dates = {
-        r["experiment_id"]: r["value"]
-        for r in conn.execute("SELECT experiment_id, value FROM experiment_metadata WHERE key='start_date'")
+
+def test_scan_derives_date_from_earliest_raw_mtime(data_root):
+    """The single experiment date is derived live from the earliest RAW mtime
+    (earlier non-raw early.csv ignored) — exposed via the SDGL tree, not stored."""
+    root, db, expected = data_root
+    sdgl = SDGL(root)
+    sdgl.scan_from_config()
+    reps = {
+        rep["id"]: rep["date"]
+        for group in sdgl.tree()["experiments"]
+        for rep in group["repetitions"]
     }
+    assert reps["TFMSP-01"] == expected[1]
+    assert reps["TFMSP-02"] == expected[2]
+
+
+def test_scan_scrubs_legacy_start_date(data_root):
+    """A legacy materialized start_date is deleted on scan; no date is stored."""
+    root, db, _ = data_root
+    sdgl = SDGL(root)
+    sdgl.scan_from_config()
+    # Inject a stale start_date as if written by an older scanner.
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "INSERT INTO experiment_metadata (experiment_id, key, value) "
+        "VALUES (1, 'start_date', '2020-01-01') "
+        "ON CONFLICT(experiment_id, key) DO UPDATE SET value = excluded.value"
+    )
+    conn.commit()
     conn.close()
-    # Materialized start_date == earliest RAW mtime (earlier non-raw early.csv ignored).
-    assert dates[1] == expected[1]
-    assert dates[2] == expected[2]
+
+    sdgl.scan_from_config()  # re-scan should scrub it
+
+    conn = sqlite3.connect(db)
+    remaining = conn.execute(
+        "SELECT COUNT(*) FROM experiment_metadata WHERE key = 'start_date'"
+    ).fetchone()[0]
+    conn.close()
+    assert remaining == 0
 
 
 def test_hidden_paths_never_recorded(data_root):
@@ -146,14 +175,15 @@ def test_rescan_self_heals_recorded_hidden_path(data_root):
     assert remaining == 0
 
 
-def test_start_date_rides_inside_experiments_sql(data_root, tmp_path):
+def test_start_date_not_stored_in_experiments_sql(data_root, tmp_path):
+    """The date is derived live, never stored, so it does not ride inside the
+    diffable experiments.sql dump."""
     root, db, expected = data_root
     SDGL(root).scan_from_config()
     sql = tmp_path / "out.sql"
     dump_db.dump(db, sql)
     text = sql.read_text()
-    assert "start_date" in text
-    assert expected[1] in text
+    assert "start_date" not in text
 
 
 def test_scan_roots_reports_progress(data_root):

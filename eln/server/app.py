@@ -280,10 +280,6 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         cfg = ts_mod.resolve_timestamp_config(app.config.get("TIMESTAMP"))
         return jsonify(ts_mod.verify_all(root, cfg))
 
-    @app.route("/api/sdgl/scan/unmatched", methods=["GET"])
-    def sdgl_scan_unmatched():
-        return jsonify(get_sdgl().list_findings("unmatched"))
-
     @app.route("/api/sdgl/provenance/stamp", methods=["POST"])
     def sdgl_provenance_stamp():
         """Commit the checkbox-selected files (same selection model as backup).

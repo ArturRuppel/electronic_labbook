@@ -29,7 +29,6 @@
             display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
             gap: 0.75rem; padding: 0.75rem; border-bottom: 1px solid #d7dde2;
         }
-        .tabs { display: flex; gap: 0.35rem; }
         button {
             border: 1px solid #b8c3cc; border-radius: 6px; background: #f7f9fa; color: #24313d;
             cursor: pointer; font: inherit; font-weight: 650; min-height: 2.1rem; padding: 0.4rem 0.75rem;
@@ -96,15 +95,6 @@
         }
         .entry-icon { flex: 0 0 1rem; text-align: center; }
 
-        /* Curation */
-        .table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-        .table th, .table td { border-bottom: 1px solid #e0e5e9; padding: 0.65rem; text-align: left; vertical-align: top; }
-        .table th { background: #f3f6f8; color: #53616d; font-size: 0.8rem; text-transform: uppercase; }
-        .type-pill {
-            display: inline-block; border-radius: 999px; background: #e5edf4; color: #2b5878;
-            font-size: 0.8rem; font-weight: 700; padding: 0.15rem 0.55rem;
-        }
-
         /* Detail */
         .detail { padding: 1rem; overflow: auto; max-height: calc(100vh - 134px); }
         .detail h2 { font-size: 1.2rem; margin-bottom: 0.35rem; overflow-wrap: anywhere; }
@@ -143,24 +133,12 @@
     <main class="shell">
         <section class="panel">
             <div class="toolbar">
-                <div class="tabs">
-                    <button id="tab-explorer" class="active" data-view="explorer-view">Explorer</button>
-                    <button id="tab-curation" data-view="curation-view">Curation</button>
-                </div>
                 <input id="search" type="search" placeholder="Search title or tags">
                 <button id="commit-btn" class="backup-btn" disabled>Commit… (0)</button>
                 <button id="backup-btn" class="backup-btn" disabled>Backup… (0)</button>
             </div>
             <div id="explorer-view" class="view active">
                 <div id="tree"></div>
-            </div>
-            <div id="curation-view" class="view">
-                <table class="table">
-                    <thead>
-                        <tr><th>Status</th><th>Root</th><th>Path</th><th>Suggestion</th></tr>
-                    </thead>
-                    <tbody id="curation-table"></tbody>
-                </table>
             </div>
         </section>
         <aside class="panel detail" id="detail">
@@ -208,9 +186,6 @@
             });
         }
 
-        document.querySelectorAll('.tabs button').forEach(button => {
-            button.addEventListener('click', () => showView(button.dataset.view));
-        });
         document.getElementById('search').addEventListener('input', applyFilter);
         if (STATIC) {
             document.getElementById('backup-btn').style.display = 'none';
@@ -225,29 +200,15 @@
         loadAll();
 
         async function loadAll() {
-            let tree, findings;
+            let tree;
             if (STATIC) {
                 const data = window.SDGL_DATA || {};
                 tree = data.tree || {experiments: []};
-                findings = data.unmatched || [];
             } else {
-                [tree, findings] = await Promise.all([
-                    fetch(`${API}/tree`).then(r => r.json()),
-                    fetch(`${API}/scan/unmatched`).then(r => r.json())
-                ]);
+                tree = await fetch(`${API}/tree`).then(r => r.json());
             }
             treeData = tree;
             renderTree();
-            renderCuration(findings);
-        }
-
-        function showView(viewId) {
-            document.querySelectorAll('.tabs button').forEach(button => {
-                button.classList.toggle('active', button.dataset.view === viewId);
-            });
-            document.querySelectorAll('.view').forEach(view => {
-                view.classList.toggle('active', view.id === viewId);
-            });
         }
 
         // ---- Tree rendering -------------------------------------------------
@@ -373,8 +334,7 @@
         }
 
         function repetitionBlock(exp, rep, key) {
-            const meta = [rep.date, rep.oldest_mtime ? `oldest ${formatMtime(rep.oldest_mtime)}` : '']
-                .filter(Boolean).join(' · ');
+            const meta = rep.date || '';
             const fileCount = countFiles(rep.files);
             const row = makeRow({
                 twisty: true, color: TYPE_COLORS.experiment,
@@ -541,7 +501,6 @@
                 <p>${escapeHtml(exp.title || '')}</p>
                 <div class="detail-section"><dl class="kv">
                     <dt>Date</dt><dd>${escapeHtml(rep.date || '—')}</dd>
-                    <dt>Oldest file</dt><dd>${rep.oldest_mtime ? formatMtime(rep.oldest_mtime) : '<span class="muted">—</span>'}</dd>
                     <dt>Items</dt><dd>${countFiles(rep.files)}</dd>
                 </dl></div>
                 <div class="detail-section">
@@ -831,19 +790,7 @@
             }
         }
 
-        // ---- Curation + search ---------------------------------------------
-
-        function renderCuration(findings) {
-            const body = document.getElementById('curation-table');
-            body.innerHTML = (findings || []).map(item => `
-                <tr>
-                    <td><span class="type-pill">${escapeHtml(item.status)}</span></td>
-                    <td>${escapeHtml(item.root_name || '')}</td>
-                    <td>${escapeHtml(item.path)}</td>
-                    <td>${escapeHtml(item.suggestion || '')}</td>
-                </tr>
-            `).join('') || '<tr><td colspan="4" class="empty">No unmatched folders</td></tr>';
-        }
+        // ---- Search ---------------------------------------------------------
 
         function applyFilter() {
             const query = document.getElementById('search').value.trim().toLowerCase();

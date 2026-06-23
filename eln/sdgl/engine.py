@@ -6,9 +6,10 @@ the original:
 
 1. The ELN database defaults to ``<root>/experiments.db`` (the data-repo layout),
    not ``<root>/data/experiments.db``.
-2. The scan materializes ``experiment_metadata.start_date`` (earliest raw-file
-   mtime) into the ELN database, so the derived dates ride inside experiments.sql
-   and the generators never need sdgl.db (Plan G).
+2. The experiment date is always derived live from the earliest raw-file mtime
+   (qualifier='raw') and never stored. The scan scrubs any legacy materialized
+   ``experiment_metadata.start_date`` so the DB carries no cached or manually
+   entered date field.
 
 The already-debugged refinements are preserved as acceptance criteria: hidden-
 folder exclusion (os.walk loops + reports glob + self-healing prune of recorded
@@ -439,22 +440,6 @@ class SDGL:
         ):
             if column not in existing_cols:
                 cursor.execute(f"ALTER TABLE file_locations ADD COLUMN {column} {decl}")
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS scan_findings (
-                id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                root_name TEXT,
-                path TEXT NOT NULL,
-                name TEXT,
-                suggestion TEXT,
-                first_seen_at TEXT,
-                last_seen_at TEXT,
-                exists_now INTEGER,
-                metadata TEXT
-            )
-            """
-        )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(type)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id)")
@@ -462,7 +447,6 @@ class SDGL:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_locations_node ON file_locations(node_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_locations_path ON file_locations(path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_locations_hash ON file_locations(content_hash)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_scan_findings_status ON scan_findings(status)")
         conn.commit()
         conn.close()
 
@@ -862,40 +846,6 @@ class SDGL:
             return prior  # unreadable (permissions, vanished mid-scan)
         return digest, size, mtime, now
 
-    def upsert_finding(self, status, root_name, path, name=None, suggestion=None, metadata=None, exists_now=1, conn=None):
-        owns_conn = conn is None
-        conn = conn or self.connect()
-        finding_id = "finding:" + stable_hash(status, root_name or "", os.path.abspath(path))
-        now = utcnow()
-        try:
-            existing = conn.execute(
-                "SELECT id FROM scan_findings WHERE id = ?", (finding_id,)
-            ).fetchone()
-            if existing:
-                conn.execute(
-                    """
-                    UPDATE scan_findings
-                    SET last_seen_at = ?, exists_now = ?, suggestion = ?, metadata = ?
-                    WHERE id = ?
-                    """,
-                    (now, exists_now, suggestion, json_dumps(metadata), finding_id),
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO scan_findings (
-                        id, status, root_name, path, name, suggestion,
-                        first_seen_at, last_seen_at, exists_now, metadata
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (finding_id, status, root_name, os.path.abspath(path), name, suggestion, now, now, exists_now, json_dumps(metadata)),
-                )
-            if owns_conn:
-                conn.commit()
-        finally:
-            if owns_conn:
-                conn.close()
-
     def scan_from_config(self, config_path=None):
         from eln.config import load_config
 
@@ -964,10 +914,6 @@ class SDGL:
                                     node_id, root_name, folder, conn, seen_paths,
                                     content_hash, hash_max_bytes,
                                 )
-                                self.upsert_finding(
-                                    "recognized", root_name, str(folder), name=dirname,
-                                    metadata={"code": code, "kind": "aggregate"}, conn=conn,
-                                )
                                 summary["aggregates"] += 1
                                 if list_paths:
                                     summary["recognized_paths"].append(str(folder))
@@ -981,20 +927,10 @@ class SDGL:
                                 "experiment:" + exp_id, root_name, folder, conn, seen_paths,
                                 content_hash, hash_max_bytes,
                             )
-                            self.upsert_finding(
-                                "recognized", root_name, str(folder), name=dirname,
-                                metadata={"experiment_id": exp_id}, conn=conn,
-                            )
                             summary["recognized"] += 1
                             if list_paths:
                                 summary["recognized_paths"].append(str(folder))
                         else:
-                            self.upsert_finding(
-                                "unmatched", root_name, str(folder), name=dirname,
-                                suggestion="create or rename to match an experiment ID",
-                                metadata={"code": parsed["code"], "rep": parsed["rep"]},
-                                conn=conn,
-                            )
                             summary["unmatched"] += 1
                         conn.commit()
                     dirnames[:] = [d for d in dirnames if d not in matched]
@@ -1052,13 +988,17 @@ class SDGL:
 
             conn.commit()
 
-            # Materialize derived start_date into experiment_metadata so the dates
-            # ride inside experiments.sql and the generators never need sdgl.db.
+            # The experiment date is always derived live from raw-file mtimes; it
+            # is never stored. Scrub any legacy materialized start_date so the DB
+            # carries no cached or manually entered date field.
             if self.eln_db_path.exists():
                 eln = sqlite3.connect(str(self.eln_db_path))
-                eln.row_factory = sqlite3.Row
                 try:
-                    self._materialize_experiment_dates(eln, conn)
+                    if self._eln_table_exists(eln, "experiment_metadata"):
+                        eln.execute(
+                            "DELETE FROM experiment_metadata WHERE key = 'start_date'"
+                        )
+                        eln.commit()
                 finally:
                     eln.close()
         finally:
@@ -1070,36 +1010,6 @@ class SDGL:
         if progress:
             progress({"phase": "done", "summary": summary})
         return summary
-
-    def _materialize_experiment_dates(self, eln, conn):
-        """Write experiment_metadata.start_date (earliest raw-file mtime, as
-        YYYY-MM-DD) for every experiment, and clear it for those with no raw
-        files. This is still 'derive from files' — just cached into the curated
-        DB so the date is portable and versioned inside experiments.sql."""
-        code_by_title = dict(eln.execute("SELECT title, code FROM experiment_codes").fetchall())
-        for row in eln.execute(
-            "SELECT id, experiment_type, repetition, excluded FROM experiments"
-        ).fetchall():
-            code = code_by_title.get(row["experiment_type"])
-            rep = row["repetition"]
-            if not code or rep is None:
-                continue
-            exp_id = format_experiment_id(code, rep, bool(row["excluded"]))
-            oldest = self._oldest_mtime(conn, "experiment:" + exp_id)
-            if oldest:
-                value = datetime.fromtimestamp(oldest).strftime("%Y-%m-%d")
-                eln.execute(
-                    "INSERT INTO experiment_metadata (experiment_id, key, value) "
-                    "VALUES (?, 'start_date', ?) "
-                    "ON CONFLICT(experiment_id, key) DO UPDATE SET value = excluded.value",
-                    (row["id"], value),
-                )
-            else:
-                eln.execute(
-                    "DELETE FROM experiment_metadata WHERE experiment_id = ? AND key = 'start_date'",
-                    (row["id"],),
-                )
-        eln.commit()
 
     def _known_experiment_ids(self):
         """Map (code, repetition, excluded) -> CODE-NN for every ELN session, for
@@ -1273,22 +1183,6 @@ class SDGL:
         finally:
             conn.close()
 
-    def list_findings(self, status=None):
-        conn = self.connect()
-        try:
-            if status:
-                rows = conn.execute(
-                    "SELECT * FROM scan_findings WHERE status = ? ORDER BY exists_now DESC, path",
-                    (status,),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM scan_findings ORDER BY status, exists_now DESC, path"
-                ).fetchall()
-            return [self._row_to_dict(row) for row in rows]
-        finally:
-            conn.close()
-
     # ---- File-explorer tree -------------------------------------------------
 
     def tree(self):
@@ -1316,8 +1210,8 @@ class SDGL:
                 )
                 # All qualifiers live at the repetition level since they can vary.
                 files = self._assemble_files(conn, node["id"])
-                # Date is derived from the earliest raw-file mtime (the experiment
-                # start), not stored on the experiment.
+                # The single experiment date is derived from the earliest raw-file
+                # mtime (the experiment start), not stored on the experiment.
                 oldest_mtime = self._oldest_mtime(conn, node["id"])
                 derived_date = (
                     datetime.fromtimestamp(oldest_mtime).strftime("%Y-%m-%d")
@@ -1329,7 +1223,6 @@ class SDGL:
                     "repetition": metadata.get("repetition"),
                     "excluded": bool(metadata.get("excluded")),
                     "date": derived_date,
-                    "oldest_mtime": oldest_mtime,
                     "files": files,
                     "links": self._linked_entities(conn, node["id"]),
                     "artifacts": self._stamped_artifacts(conn, node["id"]),

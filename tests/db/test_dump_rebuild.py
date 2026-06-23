@@ -30,7 +30,7 @@ def _populate(db_path):
     cur.execute("INSERT INTO reports (title, file_path) VALUES ('2026-02 NestinKO', 'reports/r1/r1.md')")
     cur.execute("INSERT INTO experiment_reports (experiment_id, report_id) VALUES (1, 1)")
     cur.execute(
-        "INSERT INTO experiment_metadata (experiment_id, key, value) VALUES (1, 'start_date', '2026-02-14')"
+        "INSERT INTO experiment_metadata (experiment_id, key, value) VALUES (1, 'instrument_serial', 'MX-2026-014')"
     )
     cur.execute("INSERT INTO tags (name) VALUES ('vimentin')")
     cur.execute("INSERT INTO experiment_tags (experiment_id, tag_id) VALUES (1, 1)")
@@ -103,7 +103,7 @@ def test_data_survives_roundtrip(tmp_path):
     rebuild_db.rebuild(sql, db2)
 
     conn = sqlite3.connect(db2)
-    assert conn.execute("SELECT value FROM experiment_metadata WHERE key='start_date'").fetchone()[0] == "2026-02-14"
+    assert conn.execute("SELECT value FROM experiment_metadata WHERE key='instrument_serial'").fetchone()[0] == "MX-2026-014"
     assert conn.execute("SELECT comments FROM experiments WHERE experiment_uid='AB02'").fetchone()[0] == "ünïcödé ☃ and ' quote"
     assert conn.execute("SELECT COUNT(*) FROM experiments").fetchone()[0] == 2
     assert conn.execute("SELECT code FROM experiment_codes WHERE title='Nestin KO vs Ctrl'").fetchone()[0] == "AA"

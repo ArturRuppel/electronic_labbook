@@ -67,9 +67,9 @@ CREATE TABLE IF NOT EXISTS experiment_codes (
 -- Dependent tables (foreign keys into the above)
 -- ---------------------------------------------------------------------------
 
--- Flexible key-value metadata. Holds, among others, the materialized
--- start_date per experiment (earliest raw-file mtime) so dates ride inside
--- experiments.sql and generators never need sdgl.db.
+-- Flexible key-value metadata. The experiment date is NOT stored here: it is
+-- always derived live from the earliest raw-file mtime. (A legacy 'start_date'
+-- key was materialized here; the SDGL scan now scrubs it.)
 CREATE TABLE IF NOT EXISTS experiment_metadata (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     experiment_id INTEGER NOT NULL,

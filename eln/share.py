@@ -221,11 +221,11 @@ def _staticize_sdgl(html, snapshot):
 def _write_sdgl_snapshot(root, dest):
     """Write the static SDGL page (with its data snapshot embedded inline) into the
     bundle and point the bundle root (``index.html``) at it. The snapshot is the same
-    payload the live ``/api/sdgl/tree`` and ``/api/sdgl/scan/unmatched`` endpoints
-    return, so the static page renders identically offline."""
+    payload the live ``/api/sdgl/tree`` endpoint returns, so the static page renders
+    identically offline."""
     from eln.sdgl import SDGL
     sdgl = SDGL(root)
-    snapshot = {"tree": sdgl.tree(), "unmatched": sdgl.list_findings("unmatched")}
+    snapshot = {"tree": sdgl.tree()}
     (dest / "sdgl.html").write_text(_staticize_sdgl(_SDGL_SOURCE.read_text(), snapshot))
     (dest / "index.html").write_text(_REDIRECT.format(target="sdgl.html"))
 
