@@ -13,6 +13,7 @@ import json
 import re
 from pathlib import Path
 
+from eln.generators.code import build_code_index
 from eln.generators.nav import render_nav
 from eln.generators.reports import (
     REPORTS_HTML_TEMPLATE,
@@ -25,7 +26,7 @@ from eln.generators.reports import (
 )
 
 
-def _document_card(doc_file, root):
+def _document_card(doc_file, root, code_index=None):
     """Render one document file as a collapsible report-style card, or ``None``
     for a malformed notebook (skipped, mirroring the reports generator)."""
     nb = None
@@ -55,7 +56,7 @@ def _document_card(doc_file, root):
     # Notebook documents carry a hidden full-notebook "Code" view + a toggle, just
     # like notebook reports; plain markdown documents render prose alone.
     if nb is not None:
-        code_html = render_notebook_full(nb, doc_dir)
+        code_html = render_notebook_full(nb, doc_dir, code_index)
         toggle = f"""
                         <div class="report-view-toggle">
                             <button type="button" class="view-btn active" id="btn-report-{slug}"
@@ -104,7 +105,8 @@ def generate_documents(root, catalog_out=None, plugins=None):
 
     doc_files = discover_report_files(documents_dir)
 
-    cards = [c for c in (_document_card(f, root) for f in doc_files) if c]
+    code_index = build_code_index(root)
+    cards = [c for c in (_document_card(f, root, code_index) for f in doc_files) if c]
     if cards:
         documents_html = "\n".join(cards)
     else:

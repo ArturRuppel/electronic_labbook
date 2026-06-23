@@ -13,6 +13,10 @@ tomli==2.0.1 ; python_version < "3.11"
 # cells round-trip without reformatting the rest of the notebook.
 nbformat>=5.9
 
+# Code page: build-time Python syntax highlighting. Inlined into the page (CSS +
+# highlighted HTML) so it stays self-contained and survives `eln export`.
+Pygments>=2.17
+
 # --- Optional / future (kept commented until the relevant step lands) ---
 # pillow>=10.0.0       # thumbnail generation
 # rfc3161ng>=2.1.3     # RFC 3161 trusted timestamps (compliance layer, Phase D)

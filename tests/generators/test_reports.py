@@ -244,6 +244,26 @@ def test_markdown_report_has_no_code_toggle(tmp_path):
     assert "setReportView('note'" not in text  # no toggle for this card
 
 
+def test_single_report_export_drops_code_view(tmp_path):
+    """A standalone single-report export (only=) is the narrative report alone:
+    no Code pane, no toggle, and no cross-links to a code.html absent from the bundle."""
+    from eln.generators.reports import generate_reports
+    _make_db_with_codes(tmp_path / "experiments.db", ["COV2D"])
+    _write_nb(tmp_path / "reports" / "cov2d" / "report.ipynb", [
+        {"cell_type": "markdown",
+         "source": ["# COV2D\n", "**Series:** COV2D\n", "\nProse.\n"]},
+        {"cell_type": "code", "source": ["from cov2d.plotting import save_fig\n"], "outputs": []},
+    ])
+    text = generate_reports(tmp_path, only="reports/cov2d/report.ipynb").read_text()
+    assert "Prose." in text                     # the report itself is there
+    assert 'class="report-header standalone"' in text  # rendered as a standalone export
+    assert 'class="report-code"' not in text          # no code pane
+    assert 'class="report-view-toggle"' not in text    # no Report/Code toggle UI
+    assert "setReportView('report'" not in text        # toggle not wired for this card
+    assert "from cov2d.plotting" not in text           # source not exported at all
+    assert '<a class="code-xref"' not in text          # so no dangling links to code.html
+
+
 def test_generate_skips_malformed_notebook(tmp_path):
     from eln.generators.reports import generate_reports
     (tmp_path / "experiments.db").touch()

@@ -11,13 +11,14 @@ EXPECTED = (
     '        <a href="reports.html">Reports</a>\n'
     '        <a href="presentations.html">Presentations</a>\n'
     '        <a href="documents.html">Documents</a>\n'
+    '        <a href="code.html">Code</a>\n'
     '    </div>'
 )
 
 
 def test_render_nav_matches_expected_block():
     # Core links followed by the built-in plugin links, in registration order
-    # (presentations then documents). Byte-exact so regeneration stays stable.
+    # (presentations, documents, code). Byte-exact so regeneration stays stable.
     assert render_nav() == EXPECTED
 
 

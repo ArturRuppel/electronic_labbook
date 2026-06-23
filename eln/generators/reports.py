@@ -338,6 +338,14 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
             padding: 0;
             font: inherit;
         }}
+        .code-xref {{
+            color: #286b9f;
+            text-decoration: none;
+            border-bottom: 1px dotted #9fbdd4;
+        }}
+        .code-xref:hover {{
+            text-decoration: underline;
+        }}
         .nb-outputs {{
             margin: 0.35rem 0 0 2.5rem;
         }}
@@ -950,6 +958,27 @@ def _escape(text):
     return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
+def _linkify_imports(escaped, code_index):
+    """Wrap known module names in links to the Code page.
+
+    *code_index* maps a dotted import path under ``code/`` (e.g. ``cov2d.plotting``)
+    to its ``code.html`` anchor (see :func:`eln.generators.code.build_code_index`).
+    Operates on already-escaped code-cell source: module names are plain ASCII
+    identifiers, so escaping leaves them intact. Full-token boundaries (``.`` counts
+    as a token char) keep ``cov2d`` from matching inside ``cov2d.plotting`` or
+    ``mycov2d``. Empty index → unchanged text, so repos without ``code/`` pay nothing.
+    """
+    if not code_index:
+        return escaped
+    keys = sorted(code_index, key=len, reverse=True)
+    pattern = re.compile(
+        r'(?<![\w.])(' + '|'.join(re.escape(k) for k in keys) + r')(?![\w.])')
+    return pattern.sub(
+        lambda m: f'<a class="code-xref" href="{code_index[m.group(1)]}">{m.group(1)}</a>',
+        escaped,
+    )
+
+
 def _mime_data(data, mime):
     """A MIME payload from an output's ``data`` dict as a string (joins lists)."""
     value = data.get(mime)
@@ -993,7 +1022,7 @@ def render_output(out, report_dir):
     return ""
 
 
-def render_notebook_full(nb, report_dir):
+def render_notebook_full(nb, report_dir, code_index=None):
     """Render a full notebook (markdown + code + outputs, in cell order) to HTML.
 
     This is the "Code" view of a notebook report: a faithful, top-to-bottom
@@ -1001,6 +1030,9 @@ def render_notebook_full(nb, report_dir):
     (relative images rewritten); code cells show an ``In [n]:`` prompt with the
     source and each cell's outputs. The ``{{experiments}}`` series block is *not*
     injected here — the Code view shows the notebook as written.
+
+    *code_index* (optional) cross-links any ``import`` of a module under ``code/``
+    to the Code page (see :func:`_linkify_imports`).
     """
     parts = []
     for cell in nb.get("cells", []):
@@ -1019,7 +1051,7 @@ def render_notebook_full(nb, report_dir):
                 f'<div class="nb-cell">'
                 f'<div class="nb-in">'
                 f'<span class="nb-prompt">{prompt}</span>'
-                f'<pre class="nb-code"><code>{_escape(source)}</code></pre>'
+                f'<pre class="nb-code"><code>{_linkify_imports(_escape(source), code_index)}</code></pre>'
                 f'</div>{outputs_html}</div>')
     return "\n".join(parts)
 
@@ -1153,6 +1185,10 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
         standalone = only is not None
 
         provenance = report_provenance(root)
+        # Cross-link any notebook import of a code/ module to the Code page. Lazy
+        # import avoids a module-level cycle (code.py imports from this module).
+        from eln.generators.code import build_code_index
+        code_index = build_code_index(root)
         reports_html_list = []
         for report_file in report_files:
             nb = None
@@ -1216,9 +1252,11 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
 
             # Notebook reports carry a hidden full-notebook "Code" view (code +
             # outputs) plus a Report/Code toggle. Markdown reports have no code,
-            # so they render the prose view alone with no toggle.
-            if nb is not None:
-                code_html = render_notebook_full(nb, report_dir)
+            # so they render the prose view alone with no toggle. A single-report
+            # export (standalone) is the narrative report only — no Code view, and
+            # hence no cross-links to a code.html that the bundle won't contain.
+            if nb is not None and not standalone:
+                code_html = render_notebook_full(nb, report_dir, code_index)
                 toggle = f"""
                         <div class="report-view-toggle">
                             <button type="button" class="view-btn active" id="btn-report-{slug}"
