@@ -37,7 +37,7 @@ def test_regenerate_scaffold_series_flag_runs_scaffolder(monkeypatch, tmp_path, 
 
     def _fake_scaffold(root):
         calls["root"] = root
-        return [root / "reports/auto/COV2D.md"]
+        return [root / "reports/COV2D/COV2D.md"]
     monkeypatch.setattr(reports, "generate_series_reports", _fake_scaffold)
     monkeypatch.setattr("eln.generators.generate_all", lambda root, out: {})
 

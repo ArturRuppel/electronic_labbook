@@ -1,4 +1,4 @@
-"""Auto per-series report scaffolding (reports/auto/<CODE>.md)."""
+"""Auto per-series report scaffolding (reports/<CODE>/<CODE>.md)."""
 
 import json
 import sqlite3
@@ -38,10 +38,10 @@ def _setup(root):
 def test_scaffolds_unclaimed_series_only(tmp_path):
     _setup(tmp_path)
     written = generate_series_reports(tmp_path)
-    auto = tmp_path / "reports" / "auto"
-    assert (auto / "COV2D.md").exists()
-    assert not (auto / "SORVI.md").exists()   # claimed by a hand-authored report
-    text = (auto / "COV2D.md").read_text()
+    reports = tmp_path / "reports"
+    assert (reports / "COV2D" / "COV2D.md").exists()
+    assert not (reports / "SORVI" / "SORVI.md").exists()   # claimed by a hand-authored report
+    text = (reports / "COV2D" / "COV2D.md").read_text()
     assert "**Series:** COV2D" in text
     assert "{{experiments}}" in text
     assert AUTO_START in text and AUTO_END in text
@@ -51,7 +51,7 @@ def test_scaffolds_unclaimed_series_only(tmp_path):
 def test_regeneration_preserves_human_prose(tmp_path):
     _setup(tmp_path)
     generate_series_reports(tmp_path)
-    cov = tmp_path / "reports" / "auto" / "COV2D.md"
+    cov = tmp_path / "reports" / "COV2D" / "COV2D.md"
     cov.write_text(cov.read_text() + "\n## My analysis\n\nProse the generator must keep.\n")
     generate_series_reports(tmp_path)   # re-run
     text = cov.read_text()
@@ -67,7 +67,7 @@ def test_notebook_report_claims_its_series(tmp_path):
     (tmp_path / "reports" / "cov2d_report.ipynb").write_text(
         _notebook_with_markdown("# COV2D\n\n**Series:** COV2D\n\n{{experiments}}\n"))
     written = generate_series_reports(tmp_path)
-    assert not (tmp_path / "reports" / "auto" / "COV2D.md").exists()
+    assert not (tmp_path / "reports" / "COV2D" / "COV2D.md").exists()
     assert [p.name for p in written] == []
 
 
@@ -90,7 +90,7 @@ def test_series_with_no_active_experiments_is_skipped(tmp_path):
     conn.commit()
     conn.close()
     written = generate_series_reports(tmp_path)
-    assert not (tmp_path / "reports" / "auto" / "GHOST.md").exists()
+    assert not (tmp_path / "reports" / "GHOST" / "GHOST.md").exists()
     assert [p.name for p in written] == ["COV2D.md"]
 
 

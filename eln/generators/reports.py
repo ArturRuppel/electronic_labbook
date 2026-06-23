@@ -114,7 +114,7 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Progress Reports - Electronic Lab Notebook</title>
+    <title>{page_title} - Electronic Lab Notebook</title>
     <style>
         * {{
             margin: 0;
@@ -524,8 +524,8 @@ REPORTS_HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
     <script src="auth.js"></script>
     <div class="header">
-        <h1>Progress Reports</h1>
-        <p>Experimental documentation and updates</p>
+        <h1>{page_heading}</h1>
+        <p>{page_subtitle}</p>
     </div>
 
     {nav}
@@ -783,10 +783,11 @@ def extract_report_date(content, report_file):
 
 # Markers delimiting the generator-owned region of an auto series report. The
 # scaffolder only ever rewrites the text *between* these markers, so prose a human
-# adds outside them survives regeneration.
+# adds outside them survives regeneration. Their presence is also what marks a
+# file as an auto stub (vs a hand-authored report) now that stubs are co-located
+# with hand-authored reports under reports/<CODE>/ rather than a separate auto/ dir.
 AUTO_START = "<!-- AUTO:START -->"
 AUTO_END = "<!-- AUTO:END -->"
-AUTO_SUBDIR = "auto"
 _AUTO_BLOCK_RE = re.compile(re.escape(AUTO_START) + r".*?" + re.escape(AUTO_END), re.DOTALL)
 
 
@@ -818,19 +819,18 @@ def _auto_block(code, date):
 
 def generate_series_reports(root):
     """Scaffold/refresh one auto report per experiment series under
-    ``reports/auto/<CODE>.md``.
+    ``reports/<CODE>/<CODE>.md``.
 
     Each stub carries a marker-delimited generated block (``**Series:** CODE`` +
     ``{{experiments}}``) that the existing report pipeline renders and the SDGL
     scanner indexes — no extra wiring. A series already covered by a hand-authored
-    report (any report *outside* ``reports/auto/`` that declares it) is skipped, so
+    report (any report that declares it *without* the AUTO markers) is skipped, so
     there is exactly one report per series. Regeneration rewrites only the marked
     block (refreshing the date), preserving any prose a human added around it.
     Returns the list of written stub paths.
     """
     root = Path(root)
     reports_dir = root / "reports"
-    auto_dir = reports_dir / AUTO_SUBDIR
     database_path = root / DEFAULT_DB_NAME
     sdgl_db_path = root / DEFAULT_SDGL_DB_NAME
 
@@ -841,16 +841,19 @@ def generate_series_reports(root):
         sdgl_conn = sqlite3.connect(sdgl_db_path)
         sdgl_conn.row_factory = sqlite3.Row
 
-    # Series already claimed by a hand-authored report (declared outside auto/).
-    # Reports may be markdown or notebooks, so both count: a hand-authored .ipynb
-    # claims its series exactly as a .md report does (its markdown cells carry the
-    # **Series:** line). Missing this is what spawns a duplicate auto stub.
+    # Series already claimed by a hand-authored report (one that declares the
+    # series but carries no AUTO markers). Reports may be markdown or notebooks, so
+    # both count: a hand-authored .ipynb claims its series exactly as a .md report
+    # does (its markdown cells carry the **Series:** line). An auto stub also
+    # declares its series, but is identified by its AUTO markers and skipped here —
+    # otherwise a later run would treat the stub as a claim and stop refreshing it.
+    # Missing this is what spawns a duplicate auto stub.
     human_claimed = set()
     if reports_dir.exists():
         for f in reports_dir.glob("**/*"):
             if f.suffix not in (".md", ".ipynb"):
                 continue
-            if f.name.lower() == "readme.md" or auto_dir in f.parents:
+            if f.name.lower() == "readme.md":
                 continue
             if f.suffix == ".ipynb":
                 try:
@@ -859,6 +862,8 @@ def generate_series_reports(root):
                     continue
             else:
                 content = f.read_text()
+            if AUTO_START in content:
+                continue
             declared = parse_series(content)
             if declared:
                 human_claimed.add(declared)
@@ -877,7 +882,8 @@ def generate_series_reports(root):
         ).fetchone():
             continue
         block = _auto_block(code, _series_earliest_date(code, title, eln_conn, sdgl_conn))
-        auto_path = auto_dir / f"{code}.md"
+        series_dir = reports_dir / code
+        auto_path = series_dir / f"{code}.md"
         if auto_path.exists():
             text = auto_path.read_text()
             # Replace only the marked block; never use re.sub's template (the block
@@ -888,7 +894,7 @@ def generate_series_reports(root):
                 text = block + "\n\n" + text
         else:
             text = block + "\n"
-        auto_dir.mkdir(parents=True, exist_ok=True)
+        series_dir.mkdir(parents=True, exist_ok=True)
         auto_path.write_text(text)
         written.append(auto_path)
 
@@ -1263,6 +1269,9 @@ def generate_reports(root, catalog_out=None, plugins=None, only=None,
     html = REPORTS_HTML_TEMPLATE.format(
         nav=render_nav(plugins),
         reports_html=reports_html,
+        page_title="Progress Reports",
+        page_heading="Progress Reports",
+        page_subtitle="Experimental documentation and updates",
     )
 
     # Write to file
@@ -1282,11 +1291,11 @@ def main(argv=None):
                         help="output directory (default: ROOT/catalog)")
     parser.add_argument("--scaffold-series", action="store_true",
                         help="create/refresh one auto report per series under "
-                             "reports/auto/ before rendering")
+                             "reports/<CODE>/ before rendering")
     args = parser.parse_args(argv)
     if args.scaffold_series:
         written = generate_series_reports(args.root)
-        print(f"Scaffolded {len(written)} series report(s) under reports/auto/.")
+        print(f"Scaffolded {len(written)} series report(s) under reports/<CODE>/.")
     generate_reports(args.root, args.catalog_out)
 
 
