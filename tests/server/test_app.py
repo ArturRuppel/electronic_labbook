@@ -1,6 +1,7 @@
 """End-to-end tests for the Flask app against a tiny data root."""
 
 import sqlite3
+import subprocess
 
 import pytest
 
@@ -284,6 +285,52 @@ def test_notebook_edit_rejects_non_markdown_cell_index(app_root):
         json={"cells": [{"index": 1, "source": "malicious"}]},
     )
     assert resp.status_code == 400
+
+
+# --- report versions (git-backed) ------------------------------------------
+
+def _git(args, cwd):
+    subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, check=True)
+
+
+def _report_repo(tmp_path):
+    """A git data root with one report committed twice (two versions)."""
+    root = tmp_path
+    init_db.init_db(root / "experiments.db")
+    _git(["init", "-q"], root)
+    _git(["config", "user.email", "t@e.com"], root)
+    _git(["config", "user.name", "T"], root)
+    rp = root / "reports" / "r"
+    rp.mkdir(parents=True)
+    (rp / "r.md").write_text("# v1\n")
+    _git(["add", "reports"], root)
+    _git(["commit", "-q", "-m", "first"], root)
+    (rp / "r.md").write_text("# v2\n")
+    _git(["add", "reports"], root)
+    _git(["commit", "-q", "-m", "second"], root)
+    return root
+
+
+def test_report_versions_lists_commits(tmp_path):
+    app = create_app(_report_repo(tmp_path), scan_roots=[])
+    data = app.test_client().get("/api/reports/r/r.md/versions").get_json()
+    assert [v["subject"] for v in data["versions"]] == ["second", "first"]
+
+
+def test_report_at_version_returns_old_content(tmp_path):
+    app = create_app(_report_repo(tmp_path), scan_roots=[])
+    client = app.test_client()
+    versions = client.get("/api/reports/r/r.md/versions").get_json()["versions"]
+    oldest = versions[-1]["sha"]
+    data = client.get(f"/api/reports/r/r.md?version={oldest}").get_json()
+    assert data["content"] == "# v1\n"
+    assert data["version"] == oldest
+
+
+def test_report_versions_empty_for_untracked(tmp_path):
+    app = create_app(_report_repo(tmp_path), scan_roots=[])
+    data = app.test_client().get("/api/reports/r/nope.md/versions").get_json()
+    assert data["versions"] == []
 
 
 # --- HTML serving + overlay -------------------------------------------------

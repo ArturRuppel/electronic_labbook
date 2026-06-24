@@ -901,6 +901,20 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         report_path = _resolve_report_path(filename)
         if report_path is None or not report_path.exists() or not report_path.is_file():
             return jsonify({"error": "Report not found"}), 404
+
+        version = request.args.get("version")
+        if version:
+            # Historical, read-only view from git. For notebooks we hand back the
+            # raw .ipynb text (the UI shows it read-only); markdown comes back as-is.
+            from eln.analysis.gitref import file_at_commit
+            rel = report_path.relative_to(root.resolve()).as_posix()
+            content = file_at_commit(root, version, rel)
+            if content is None:
+                return jsonify({"error": "Version not found"}), 404
+            kind = "notebook" if report_path.suffix == ".ipynb" else "markdown"
+            return jsonify({"filename": filename, "type": kind,
+                            "version": version, "content": content})
+
         # A notebook returns its markdown cells (text only) for per-cell editing;
         # code cells and outputs are never sent and stay untouched on save.
         if report_path.suffix == ".ipynb":
@@ -966,6 +980,18 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
             return jsonify({"success": True, "message": "Report deleted"})
         except OSError as e:
             return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/reports/<path:filename>/versions", methods=["GET"])
+    def report_versions(filename):
+        """List git commits that touched this report file (newest first). Each
+        version is a Publish commit. Empty list outside a repo / for an untracked
+        file — the UI then simply shows no selector."""
+        from eln.analysis.gitref import file_history
+        report_path = _resolve_report_path(filename)
+        if report_path is None:
+            return jsonify({"error": "Invalid filename"}), 400
+        rel = report_path.relative_to(root.resolve()).as_posix()
+        return jsonify({"versions": file_history(root, rel)})
 
     # ==================== REGENERATE CATALOGS ====================
 
