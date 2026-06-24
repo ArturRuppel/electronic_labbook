@@ -145,7 +145,8 @@
                 pre.textContent = data.content || '';
                 content.innerHTML = '';
                 content.appendChild(pre);
-            });
+            })
+            .catch(function() { /* server/git unavailable → leave card untouched */ });
     }
 
     if (page === 'experiments.html') {

@@ -47,15 +47,6 @@
     transform: translateY(0);
 }
 
-.eln-toolbar-btn.add {
-    background: rgba(255,255,255,0.2);
-    color: white;
-}
-
-.eln-toolbar-btn.add:hover {
-    background: rgba(255,255,255,0.3);
-}
-
 .eln-toolbar-btn.publish {
     background: #28a745;
     color: white;
