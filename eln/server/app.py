@@ -5,7 +5,7 @@ Ported from the original ``api_server.py``. Two changes for the clean rebuild:
 - the server is bound to a **data-repo root** (``create_app(root)``) instead of
   assuming code and data share one directory. Generated pages and data assets
   (reports/, presentations/, thumbnails/) live under that root; the static
-  frontend (sdgl.html, admin.html/js, edit-overlay.*) ships in the *code* repo's
+  frontend (sdgl.html, edit-overlay.*, forms.js) ships in the *code* repo's
   ``catalog/`` and is found via ``ASSETS_DIR``;
 - catalog regeneration runs the generators in-process (``generate_all``) rather
   than shelling out to ``scripts/``, and publish dumps ``experiments.sql`` to the
@@ -180,9 +180,9 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     def serve_overlay_css():
         return send_from_directory(str(assets), "edit-overlay.css")
 
-    @app.route("/admin.js")
-    def serve_admin_js():
-        return send_from_directory(str(assets), "admin.js")
+    @app.route("/forms.js")
+    def serve_forms_js():
+        return send_from_directory(str(assets), "forms.js")
 
     @app.route("/auth.js")
     def serve_auth_js_noop():

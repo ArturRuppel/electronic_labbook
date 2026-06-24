@@ -333,6 +333,13 @@ def test_report_versions_empty_for_untracked(tmp_path):
     assert data["versions"] == []
 
 
+# --- frontend assets --------------------------------------------------------
+
+def test_forms_js_served_and_admin_js_gone(client):
+    assert client.get("/forms.js").status_code == 200
+    assert client.get("/admin.js").status_code == 404
+
+
 # --- documents CRUD ---------------------------------------------------------
 
 def test_documents_create_get_update_delete(client):
