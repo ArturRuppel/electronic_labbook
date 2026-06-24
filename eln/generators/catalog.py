@@ -111,7 +111,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             text-decoration: underline;
         }}
         .container {{
-            max-width: 1760px;
+            max-width: none;
             margin: 0 auto;
             padding: 1.5rem;
         }}
@@ -213,6 +213,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         th.sort-desc::after {{
             content: ' ↓';
             opacity: 1;
+        }}
+        /* Drag handle on the right edge of each header for resizing columns. */
+        .col-resizer {{
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 7px;
+            height: 100%;
+            cursor: col-resize;
+            user-select: none;
+        }}
+        .col-resizer:hover {{
+            background: #c4d0d9;
         }}
         td {{
             padding: 0.65rem;
@@ -359,10 +372,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <script>
         let sortColumn = 'date';
         let sortDirection = 'desc';
+        let justResized = false;
 
         // Table sorting
         document.querySelectorAll('th').forEach(header => {{
             header.addEventListener('click', () => {{
+                if (justResized) return;   // ignore the click that ends a drag-resize
                 const column = header.dataset.column;
 
                 if (sortColumn === column) {{
@@ -427,6 +442,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         // Set initial sort
         document.querySelector('th[data-column="date"]').classList.add('sort-desc');
+
+        // Resizable columns: drag the right edge of any header.
+        document.querySelectorAll('#experiments-table thead th').forEach(th => {{
+            const handle = document.createElement('div');
+            handle.className = 'col-resizer';
+            th.appendChild(handle);
+            handle.addEventListener('click', (e) => e.stopPropagation());
+            handle.addEventListener('mousedown', (e) => {{
+                const startX = e.pageX;
+                const startW = th.offsetWidth;
+                const onMove = (ev) => {{
+                    th.style.width = Math.max(40, startW + (ev.pageX - startX)) + 'px';
+                }};
+                const onUp = () => {{
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    document.body.style.userSelect = '';
+                    justResized = true;
+                    setTimeout(() => {{ justResized = false; }}, 0);
+                }};
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+                e.stopPropagation();
+            }});
+        }});
     </script>
 </body>
 </html>

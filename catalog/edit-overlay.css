@@ -6,15 +6,23 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #263646;
     color: white;
-    padding: 0.75rem 2rem;
+    padding: 0.7rem 1.5rem;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
     z-index: 9999;
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.25);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Right-aligned cluster holding Add / Export / Publish, kept tightly grouped. */
+.eln-toolbar-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
 }
 
 .eln-toolbar-label {
@@ -25,10 +33,11 @@
     white-space: nowrap;
 }
 
+/* Base toolbar button = the secondary "Export" style: subtle on the dark bar. */
 .eln-toolbar-btn {
-    padding: 0.5rem 1rem;
+    padding: 0.45rem 0.95rem;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
@@ -37,9 +46,12 @@
     text-decoration: none;
     display: inline-block;
     line-height: 1.4;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
 }
 
 .eln-toolbar-btn:hover {
+    background: rgba(255, 255, 255, 0.24);
     transform: translateY(-1px);
 }
 
@@ -47,30 +59,37 @@
     transform: translateY(0);
 }
 
+.eln-toolbar-btn.add {
+    background: #286b9f;
+}
+
+.eln-toolbar-btn.add:hover {
+    background: #2f7cb6;
+}
+
 .eln-toolbar-btn.publish {
-    background: #28a745;
+    background: #27735f;
     color: white;
-    margin-left: auto;
 }
 
 .eln-toolbar-btn.publish:hover {
-    background: #218838;
+    background: #2f8a72;
 }
 
 .eln-toolbar-btn.publish:disabled {
-    background: #6c757d;
+    background: #46555f;
     cursor: not-allowed;
     transform: none;
 }
 
-/* Inline edit buttons */
+/* Inline edit buttons (per card / row) */
 .eln-edit-btn {
-    padding: 0.3rem 0.7rem;
-    background: #667eea;
+    padding: 0.28rem 0.7rem;
+    background: #286b9f;
     color: white;
     border: none;
-    border-radius: 4px;
-    font-size: 0.8rem;
+    border-radius: 6px;
+    font-size: 0.78rem;
     font-weight: 600;
     cursor: pointer;
     text-decoration: none;
@@ -80,8 +99,27 @@
 }
 
 .eln-edit-btn:hover {
-    background: #5568d3;
+    background: #2f7cb6;
     color: white;
+}
+
+/* Tight right-side cluster for a card header: version pill + Edit/Export. */
+.eln-card-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+/* Small "latest version" pill shown in a report header (mirrors .latest-badge). */
+.eln-version-pill {
+    background: #e5edf4;
+    color: #2b5878;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 /* Add padding at page bottom so toolbar doesn't cover content */
@@ -120,14 +158,20 @@ body.eln-editing {
 }
 
 .eln-toast.info {
-    background: #667eea;
+    background: #286b9f;
 }
 
 /* ==================== inline form modal ==================== */
 
 .eln-form-modal {
-    width: min(900px, 92vw);
-    max-height: 88vh;
+    /* Big and centered. The generated pages ship a `* { margin: 0 }` reset that
+       clobbers the UA's `margin: auto` modal centering, so we re-assert it. */
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: min(1180px, 94vw);
+    max-width: 94vw;
+    max-height: 92vh;
     overflow: auto;
     border: none;
     border-radius: 10px;
@@ -214,21 +258,17 @@ body.eln-editing {
 }
 .eln-form-modal-body .hidden { display: none; }
 
-/* Page-level Add buttons injected by edit-overlay.js into the page header. */
-.eln-add-btn {
-    display: inline-block; margin-left: 1rem; padding: 0.4rem 0.9rem;
-    background: #667eea; color: #fff; border: none; border-radius: 6px;
-    font-size: 0.85rem; font-weight: 600; cursor: pointer; text-decoration: none;
-    vertical-align: middle;
-}
-.eln-add-btn:hover { background: #5568d3; color: #fff; }
-
-/* Report version indicator + selector */
+/* Report version selector — lives inside the card body, so it only shows once
+   the card is expanded (mirrors the protocols' .version-selector). */
 .eln-version {
-    margin-left: 1rem; font-size: 0.8rem; color: #556;
-    display: inline-flex; gap: 0.4rem; align-items: center;
+    margin: 0 0 1rem; font-size: 0.9rem; color: #53616d;
+    display: flex; gap: 0.5rem; align-items: center;
 }
-.eln-version-select { font-size: 0.8rem; }
+.eln-version label { font-weight: 600; }
+.eln-version-select {
+    padding: 0.4rem 0.6rem; border: 1px solid #b8c3cc;
+    border-radius: 6px; font-size: 0.9rem;
+}
 .eln-version-pre {
     white-space: pre-wrap; background: #f6f8fa; padding: 1rem;
     border-radius: 6px; overflow: auto;

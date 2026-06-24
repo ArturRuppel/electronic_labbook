@@ -9,8 +9,10 @@
     toolbar.className = 'eln-toolbar';
     toolbar.innerHTML = `
         <span class="eln-toolbar-label">Lab Notebook</span>
-        <button class="eln-toolbar-btn publish" id="eln-publish-btn">Publish</button>
-        <button class="eln-toolbar-btn" id="eln-export-btn">Export catalog</button>
+        <div class="eln-toolbar-actions">
+            <button class="eln-toolbar-btn" id="eln-export-btn">Export catalog</button>
+            <button class="eln-toolbar-btn publish" id="eln-publish-btn">Publish</button>
+        </div>
     `;
     document.body.appendChild(toolbar);
 
@@ -112,16 +114,46 @@
     // --- Edit/Add buttons per page ---
     var page = location.pathname.split('/').pop() || 'sdgl.html';
 
-    // Inject an "+ Add …" button into the page header (.header is present on
-    // every catalogue page). Opens the matching inline form modal.
+    // Inject an "+ Add …" button into the bottom toolbar, next to Export/Publish.
+    // Opens the matching inline form modal.
     function addPageAddButton(label, onClick) {
-        var header = document.querySelector('.header');
-        if (!header) return;
+        var actions = document.querySelector('.eln-toolbar-actions');
+        if (!actions) return;
         var btn = document.createElement('button');
-        btn.className = 'eln-add-btn';
+        btn.className = 'eln-toolbar-btn add';
         btn.textContent = label;
         btn.addEventListener('click', onClick);
-        header.appendChild(btn);
+        actions.insertBefore(btn, actions.firstChild);
+    }
+
+    // Build (once) a tight right-aligned action cluster inside a card header,
+    // pulling the header's existing right-hand element (badge / date) into it so
+    // everything stays grouped. Returns the cluster to append buttons/pills to.
+    function cardActions(header, existingRight) {
+        var cluster = header.querySelector('.eln-card-actions');
+        if (cluster) return cluster;
+        cluster = document.createElement('span');
+        cluster.className = 'eln-card-actions';
+        if (existingRight && existingRight.parentNode === header) {
+            cluster.appendChild(existingRight);
+        }
+        header.appendChild(cluster);
+        return cluster;
+    }
+
+    // A small Edit/Export anchor for a card-action cluster (stops the click from
+    // bubbling to the header's expand/collapse toggle).
+    function clusterButton(label, onClick) {
+        var a = document.createElement('a');
+        a.className = 'eln-edit-btn';
+        a.href = '#';
+        a.textContent = label;
+        a.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClick();
+        });
+        return a;
     }
 
     // Encode a report identifier ("dir/file.md") as a URL path, segment by
@@ -172,6 +204,8 @@
             var th = document.createElement('th');
             th.textContent = '';
             th.style.cursor = 'default';
+            th.style.width = '64px';      // keep the action column tight…
+            th.style.minWidth = '64px';   // …so it doesn't force horizontal scroll
             headerRow.appendChild(th);
         }
         addPageAddButton('+ Add experiment', function() {
@@ -180,36 +214,20 @@
     }
 
     if (page === 'protocols.html') {
-        // Add Edit button to each protocol group header
+        // Group the LATEST badge + Edit + Export into one tight right-side cluster.
         var groups = document.querySelectorAll('.protocol-group');
         groups.forEach(function(group) {
             var id = group.id;
             if (!id) return;
             var header = group.querySelector('.protocol-header');
             if (!header) return;
-            var a = document.createElement('a');
-            a.className = 'eln-edit-btn';
-            a.href = '#';
-            a.textContent = 'Edit';
-            a.style.marginLeft = '1rem';
-            a.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
+            var cluster = cardActions(header, header.querySelector('.latest-badge'));
+            cluster.appendChild(clusterButton('Edit', function() {
                 window.elnForms.openProtocolForm(id);
-            });
-            header.appendChild(a);
-
-            var ex = document.createElement('a');
-            ex.className = 'eln-edit-btn';
-            ex.textContent = 'Export';
-            ex.href = '#';
-            ex.style.marginLeft = '0.5rem';
-            ex.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
+            }));
+            cluster.appendChild(clusterButton('Export', function() {
                 runExport('protocol', id, 'protocol');
-            });
-            header.appendChild(ex);
+            }));
         });
         addPageAddButton('+ Add protocol', function() {
             window.elnForms.openProtocolForm();
@@ -217,8 +235,10 @@
     }
 
     if (page === 'reports.html') {
-        // Edit opens the inline modal; a git-backed version selector is added per
-        // card. No Add button — reports are autogenerated from experiments.
+        // Render like protocols: a tight right-side cluster (date + version pill +
+        // Edit + Export), with the version *selector* tucked inside the card body
+        // so it only appears once the card is expanded. No Add button — reports are
+        // autogenerated from experiments.
         var cards = document.querySelectorAll('.report-card');
         cards.forEach(function(card) {
             var src = card.getAttribute('data-report-src');
@@ -226,50 +246,48 @@
             // (e.g. "foo/foo.md"). data-report-src is "reports/<relpath>", so
             // strip that one prefix.
             var filename = src ? src.replace(/^reports\//, '') : null;
+            var header = card.querySelector('.report-header');
+            if (!header) return;
+            var cluster = cardActions(header, header.querySelector('.report-date'));
             if (filename) {
-                var a = document.createElement('a');
-                a.className = 'eln-edit-btn';
-                a.href = '#';
-                a.textContent = 'Edit';
-                a.style.float = 'right';
-                a.addEventListener('click', function(e) {
-                    e.preventDefault();
+                cluster.appendChild(clusterButton('Edit', function() {
                     window.elnForms.openReportEditor(filename);
-                });
-                card.insertBefore(a, card.firstChild);
+                }));
             }
-
             if (src) {
-                var ex = document.createElement('a');
-                ex.className = 'eln-edit-btn';
-                ex.textContent = 'Export';
-                ex.href = '#';
-                ex.style.float = 'right';
-                ex.style.marginRight = '0.5rem';
-                ex.addEventListener('click', function(e) {
-                    e.preventDefault();
+                cluster.appendChild(clusterButton('Export', function() {
                     runExport('report', src, 'report');
-                });
-                card.insertBefore(ex, card.firstChild);
+                }));
             }
-
-            if (filename) addVersionSelector(card, filename);
+            if (filename) addVersionSelector(card, filename, cluster);
         });
     }
 
-    // Fetch a report's git history and, if it has any, add a version indicator
-    // and a dropdown to the card header. Selecting a version shows it read-only.
-    function addVersionSelector(card, filename) {
+    // Fetch a report's git history and, if any exists, show a small "v{N}" pill in
+    // the header and a version dropdown inside the card body (visible on expand).
+    // Selecting a version renders it read-only.
+    function addVersionSelector(card, filename, cluster) {
         fetch('/api/reports/' + encodeReportPath(filename) + '/versions')
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var versions = (data && data.versions) || [];
                 if (versions.length === 0) return; // unpublished / not in git
-                var wrap = document.createElement('span');
+
+                // Small pill in the header, before the Edit/Export buttons.
+                var pill = document.createElement('span');
+                pill.className = 'eln-version-pill';
+                pill.textContent = 'v' + versions.length;
+                pill.title = versions.length + ' published version(s); latest ' +
+                    versions[0].date.slice(0, 10);
+                cluster.insertBefore(pill, cluster.querySelector('.eln-edit-btn'));
+
+                // Selector inside the (collapsed) details, mirroring protocols.
+                var details = card.querySelector('.report-details');
+                if (!details) return;
+                var wrap = document.createElement('div');
                 wrap.className = 'eln-version';
-                var label = document.createElement('span');
-                label.className = 'eln-version-label';
-                label.textContent = 'Published v' + versions.length + ' · ' + versions[0].date.slice(0, 10);
+                var label = document.createElement('label');
+                label.textContent = 'Version:';
                 var sel = document.createElement('select');
                 sel.className = 'eln-version-select';
                 versions.forEach(function(v, i) {
@@ -278,12 +296,10 @@
                     opt.textContent = 'v' + (versions.length - i) + ' · ' + v.date.slice(0, 10) + ' · ' + v.subject;
                     sel.appendChild(opt);
                 });
-                sel.addEventListener('click', function(e) { e.stopPropagation(); });
                 sel.addEventListener('change', function() { showReportVersion(card, filename, sel.value); });
                 wrap.appendChild(label);
                 wrap.appendChild(sel);
-                var header = card.querySelector('.report-header') || card;
-                header.appendChild(wrap);
+                details.insertBefore(wrap, details.firstChild);
             })
             .catch(function() { /* git/server unavailable → no selector */ });
     }
@@ -296,16 +312,12 @@
             var src = card.getAttribute('data-report-src');
             var filename = src ? src.replace(/^documents\//, '') : null;
             if (!filename) return;
-            var a = document.createElement('a');
-            a.className = 'eln-edit-btn';
-            a.href = '#';
-            a.textContent = 'Edit';
-            a.style.float = 'right';
-            a.addEventListener('click', function(e) {
-                e.preventDefault();
+            var header = card.querySelector('.report-header');
+            if (!header) return;
+            var cluster = cardActions(header, header.querySelector('.report-date'));
+            cluster.appendChild(clusterButton('Edit', function() {
                 window.elnForms.openDocumentForm(filename);
-            });
-            card.insertBefore(a, card.firstChild);
+            }));
         });
         addPageAddButton('+ Add document', function() {
             window.elnForms.openDocumentForm();
