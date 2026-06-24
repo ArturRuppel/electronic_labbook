@@ -333,6 +333,53 @@ def test_report_versions_empty_for_untracked(tmp_path):
     assert data["versions"] == []
 
 
+# --- documents CRUD ---------------------------------------------------------
+
+def test_documents_create_get_update_delete(client):
+    # create
+    r = client.post("/api/documents", json={"filename": "note/note.md", "content": "# hi\n"})
+    assert r.status_code == 200, r.get_json()
+
+    # list
+    listed = client.get("/api/documents").get_json()
+    assert any(d["filename"] == "note/note.md" for d in listed)
+
+    # get
+    got = client.get("/api/documents/note/note.md").get_json()
+    assert got["content"] == "# hi\n"
+
+    # update
+    assert client.put("/api/documents/note/note.md", json={"content": "# bye\n"}).status_code == 200
+    assert client.get("/api/documents/note/note.md").get_json()["content"] == "# bye\n"
+
+    # delete
+    assert client.delete("/api/documents/note/note.md").status_code == 200
+    assert client.get("/api/documents/note/note.md").status_code == 404
+
+
+def test_documents_reject_escape(client):
+    r = client.post("/api/documents", json={"filename": "../evil.md", "content": "x"})
+    assert r.status_code == 400
+
+
+def test_documents_notebook_edits_only_markdown_cells(app_root):
+    import nbformat
+    root, app = app_root
+    client = app.test_client()
+    nb_path = root / "documents" / "nb" / "nb.ipynb"
+    _write_notebook(nb_path)
+
+    resp = client.put(
+        "/api/documents/nb/nb.ipynb",
+        json={"cells": [{"index": 0, "source": "# Edited"}]},
+    )
+    assert resp.status_code == 200
+    nb = nbformat.read(str(nb_path), as_version=4)
+    assert nb.cells[0].source == "# Edited"
+    assert nb.cells[1].source == "print('hi')"   # code cell untouched
+    assert nb.cells[1].outputs[0].text == "hi\n"  # output preserved
+
+
 # --- HTML serving + overlay -------------------------------------------------
 
 def test_index_serves_sdgl_with_overlay(client):

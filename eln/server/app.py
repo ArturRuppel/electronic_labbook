@@ -114,6 +114,7 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     sdgl_db_path = Path(sdgl_db_path) if sdgl_db_path else root / "sdgl.db"
     catalog_dir = root / "catalog"
     reports_path = root / "reports"
+    documents_path = root / "documents"
     thumbnails_path = root / "thumbnails"
     assets = Path(assets_dir) if assets_dir else ASSETS_DIR
 
@@ -992,6 +993,102 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
             return jsonify({"error": "Invalid filename"}), 400
         rel = report_path.relative_to(root.resolve()).as_posix()
         return jsonify({"versions": file_history(root, rel)})
+
+    # ==================== DOCUMENTS ====================
+    # Documents are freeform, series-less write-ups stored as files under
+    # ROOT/documents/ (markdown or notebook), structurally identical to reports.
+    # These routes mirror the report routes, pointed at documents_path.
+
+    def _resolve_document_path(filename):
+        """Resolve a document identifier (path relative to documents/) to an
+        absolute path, refusing anything that escapes documents/. None if unsafe."""
+        candidate = (documents_path / filename).resolve()
+        base = documents_path.resolve()
+        if candidate != base and base not in candidate.parents:
+            return None
+        return candidate
+
+    @app.route("/api/documents", methods=["GET"])
+    def list_documents():
+        documents_path.mkdir(exist_ok=True)
+        documents = []
+        for doc_file in discover_report_files(documents_path, suffixes=(".md", ".ipynb")):
+            stat = doc_file.stat()
+            documents.append({
+                "filename": doc_file.relative_to(documents_path).as_posix(),
+                "type": "notebook" if doc_file.suffix == ".ipynb" else "markdown",
+                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "size": stat.st_size,
+            })
+        documents.sort(key=lambda x: x["modified"], reverse=True)
+        return jsonify(documents)
+
+    @app.route("/api/documents/<path:filename>", methods=["GET"])
+    def get_document(filename):
+        doc_path = _resolve_document_path(filename)
+        if doc_path is None or not doc_path.exists() or not doc_path.is_file():
+            return jsonify({"error": "Document not found"}), 404
+        if doc_path.suffix == ".ipynb":
+            try:
+                cells = _read_notebook_markdown_cells(doc_path)
+            except Exception as e:  # noqa: BLE001
+                return jsonify({"error": f"Could not read notebook: {e}"}), 400
+            return jsonify({"filename": filename, "type": "notebook", "cells": cells})
+        try:
+            content = doc_path.read_text(encoding="utf-8")
+            return jsonify({"filename": filename, "type": "markdown", "content": content})
+        except OSError as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/documents", methods=["POST"])
+    def create_document():
+        data = request.json or {}
+        filename = data.get("filename")
+        content = data.get("content", "")
+        if not filename or not filename.endswith(".md"):
+            return jsonify({"error": "Invalid filename (must end with .md)"}), 400
+        doc_path = _resolve_document_path(filename)
+        if doc_path is None:
+            return jsonify({"error": "Invalid filename"}), 400
+        if doc_path.exists():
+            return jsonify({"error": "Document already exists"}), 400
+        try:
+            doc_path.parent.mkdir(parents=True, exist_ok=True)
+            doc_path.write_text(content, encoding="utf-8")
+            return jsonify({"success": True, "message": "Document created", "filename": filename})
+        except OSError as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/documents/<path:filename>", methods=["PUT"])
+    def update_document(filename):
+        data = request.json or {}
+        doc_path = _resolve_document_path(filename)
+        if doc_path is None or not doc_path.exists():
+            return jsonify({"error": "Document not found"}), 404
+        if doc_path.suffix == ".ipynb":
+            try:
+                _apply_markdown_cell_edits(doc_path, data.get("cells", []))
+            except ValueError as e:
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:  # noqa: BLE001
+                return jsonify({"error": f"Could not write notebook: {e}"}), 500
+            return jsonify({"success": True, "message": "Document updated"})
+        try:
+            doc_path.write_text(data.get("content", ""), encoding="utf-8")
+            return jsonify({"success": True, "message": "Document updated"})
+        except OSError as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/documents/<path:filename>", methods=["DELETE"])
+    def delete_document(filename):
+        doc_path = _resolve_document_path(filename)
+        if doc_path is None or not doc_path.exists():
+            return jsonify({"error": "Document not found"}), 404
+        try:
+            doc_path.unlink()
+            return jsonify({"success": True, "message": "Document deleted"})
+        except OSError as e:
+            return jsonify({"error": str(e)}), 500
 
     # ==================== REGENERATE CATALOGS ====================
 
