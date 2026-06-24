@@ -58,6 +58,24 @@ def test_publish_dumps_sql_and_commits(data_repo):
     assert "experiments.db" not in tracked  # binary stays out of git
 
 
+def test_publish_rebuilds_catalog(data_repo):
+    # No catalog/ exists yet; publish must generate it so the local view is fresh.
+    assert not (data_repo / "catalog" / "experiments.html").exists()
+
+    result = publish(data_repo, push=False)
+    assert result["success"] is True
+
+    catalog = data_repo / "catalog"
+    assert (catalog / "experiments.html").exists()
+    assert (catalog / "reports.html").exists()
+
+    # catalog/ is a derived build artifact — it must NOT be committed.
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=str(data_repo), capture_output=True, text=True
+    ).stdout
+    assert "catalog/experiments.html" not in tracked
+
+
 def test_publish_nothing_to_publish_when_unchanged(data_repo):
     publish(data_repo, push=False)
     second = publish(data_repo, push=False)

@@ -3,8 +3,10 @@
 Unlike the original monorepo (which committed the binary ``data/experiments.db``),
 the clean-rebuild publish materializes the database into its diffable form —
 ``experiments.sql`` via :func:`eln.db.dump` — and commits *that* to the **data**
-repo, then pushes. The static ``catalog/`` is intentionally not committed: GitLab
-CI rebuilds it from ``experiments.sql`` on every Pages build.
+repo, then pushes. The static ``catalog/`` is rebuilt in-process on every publish
+(:func:`eln.generators.generate_all`) so the local view is never stale, but it is
+intentionally **not** committed — it is a derived build artifact and stays
+gitignored in the data repo.
 """
 
 import subprocess
@@ -12,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from eln.db.dump_db import dump
+from eln.generators import generate_all
 from eln.sdgl import allocate_experiment_codes
 
 # Tracked, diffable data committed on publish. The binary experiments.db / sdgl.db
@@ -71,6 +74,11 @@ def publish(root, eln_db_path=None, *, push=True, remote="origin", branch="main"
     # 1. Materialize derived identifiers (CODE-NN) before dumping; dates stay
     #    derived from raw-file mtimes at generation time and need no materializing.
     allocate_experiment_codes(db_path)
+
+    # 1b. Rebuild the static catalog/ from the live DB so the local view tab is
+    #     never stale after an edit-then-publish. catalog/ stays gitignored — it
+    #     is a derived build artifact, not committed (see PUBLISH_PATHS below).
+    generate_all(root, root / "catalog")
 
     # 2. Dump the database to its diffable form inside the data repo.
     dump(db_path, root / "experiments.sql")
