@@ -18,8 +18,8 @@ The server is **local-only and unauthenticated by design**.
   `/api/publish`.
 - **HTML with overlay injection**: generated pages (`experiments.html`,
   `protocols.html`, `reports.html`, `presentations.html`) are read
-  from `root/catalog/`; the static frontend (`sdgl.html` at `/`, `admin.html`,
-  `admin.js`, `edit-overlay.*`) ships in the **code repo's** `catalog/` and is
+  from `root/catalog/`; the static frontend (`sdgl.html` at `/`,
+  `edit-overlay.*`, `forms.js`) ships in the **code repo's** `catalog/` and is
   found via `ASSETS_DIR`. On serve, `auth.js` is stripped and the edit overlay is
   injected before `</body>`.
 - `auth.js` is served as a **no-op** locally; the real Pages password gate is a

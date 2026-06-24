@@ -3,9 +3,10 @@
 This directory holds the **hand-written** static frontend assets that ship with
 the code:
 
-- `edit-overlay.js` / `edit-overlay.css` — local edit toolbar injected by the
-  server into catalog pages.
-- `admin.js` / `admin.html` — the admin panel (with deep-link support).
+- `edit-overlay.js` / `edit-overlay.css` — local edit toolbar + inline Edit/Add
+  buttons injected by the server into catalog pages.
+- `forms.js` — the inline create/edit form modals (experiments, protocols,
+  documents, reports) opened from the viewer's Edit/Add buttons.
 - `sdgl.html` — the Scientific Data Graph Layer, served at `/`; it is the
   notebook's home page.
 - shared CSS.
@@ -15,4 +16,5 @@ The **generated** pages (`experiments.html`, `protocols.html`, `notebooks.html`,
 **gitignored** (`catalog/*.html`). On deploy they are built fresh and served via
 GitLab Pages from the **data** repo.
 
-Assets are ported from the original server + overlay/admin.
+Assets are ported from the original server + overlay; the former standalone admin
+panel has been absorbed into the viewer as inline `forms.js` modals.

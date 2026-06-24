@@ -13,11 +13,10 @@
 labbook.toml
 
 # Generated static catalog pages (produced by the generators at build time).
-# Static frontend assets that happen to be .html (templates, admin, graph view)
-# are negated below so they stay tracked.
+# Static frontend assets that happen to be .html (templates, graph view) are
+# negated below so they stay tracked.
 catalog/*.html
 !catalog/home_template.html
-!catalog/admin.html
 !catalog/sdgl.html
 
 # Python

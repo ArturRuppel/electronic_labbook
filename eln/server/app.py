@@ -63,6 +63,7 @@ CORE_GENERATED_PAGES = {
 
 OVERLAY_SNIPPET = '''
 <link rel="stylesheet" href="/edit-overlay.css">
+<script src="/forms.js"></script>
 <script src="/edit-overlay.js"></script>
 '''
 
@@ -491,7 +492,7 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         """Distinct values per field, for autocomplete (field history).
 
         Suggestions reflect the whole database rather than only the rows the
-        admin page has loaded. Channel targets are collapsed through the
+        current page has loaded. Channel targets are collapsed through the
         configured fungibility map so equivalent markers ("GFP"/"488"/"FITC")
         surface as a single canonical suggestion.
         """
@@ -881,8 +882,8 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         # Reports are organised one folder per report, so discovery recurses and
         # the identifier is the path relative to reports/ (not just the basename),
         # which is what the GET/PUT/DELETE routes below expect. Notebooks are
-        # listed too: their markdown (text) cells are editable in the admin panel,
-        # while code cells and outputs stay read-only.
+        # listed too: their markdown (text) cells are editable inline in the
+        # viewer, while code cells and outputs stay read-only.
         reports = []
         for report_file in discover_report_files(reports_path, suffixes=(".md", ".ipynb")):
             stat = report_file.stat()
