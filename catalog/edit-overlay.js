@@ -324,6 +324,36 @@
         });
     }
 
+    if (page === 'posters.html') {
+        // Each card gets a Remove action; a page-level Add opens the poster form
+        // (pick a title + an SVG already in the posters/ folder).
+        var posterCards = document.querySelectorAll('.poster-card');
+        posterCards.forEach(function(card) {
+            var file = card.getAttribute('data-poster-file');
+            if (!file) return;
+            var title = card.querySelector('.poster-title');
+            if (!title) return;
+            var cluster = cardActions(title, null);
+            cluster.appendChild(clusterButton('Remove', function() {
+                if (!window.confirm('Remove this poster from the list? The SVG file stays in posters/.')) return;
+                fetch('/api/posters', {
+                    method: 'DELETE',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({file: file})
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.error) { showToast('Error: ' + d.error, 'error'); return; }
+                    return fetch('/api/regenerate', {method: 'POST'}).then(function() { location.reload(); });
+                })
+                .catch(function(err) { showToast('Network error: ' + err.message, 'error'); });
+            }));
+        });
+        addPageAddButton('+ Add poster', function() {
+            window.elnForms.openPosterForm();
+        });
+    }
+
     if (page === 'presentations.html') {
         // Add an Export button to each presentation row.
         var prows = document.querySelectorAll('tr[data-pres-dir]');

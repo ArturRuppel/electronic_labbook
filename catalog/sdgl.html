@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SDGL</title>
+    <title>Data Explorer</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -120,17 +120,21 @@
 <body>
     <script src="auth.js"></script>
     <header class="header">
-        <h1>Scientific Data Graph Layer</h1>
-        <p>Experiments &rarr; repetitions &rarr; data files and linked entities</p>
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <svg width="34" height="34" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="12" y="8" width="40" height="48" rx="4" fill="#eef1f4"></rect><line x1="21" y1="8" x2="21" y2="56" stroke="#8aa0b3" stroke-width="1.6"></line><circle cx="16.5" cy="20" r="1.6" fill="#8aa0b3"></circle><circle cx="16.5" cy="32" r="1.6" fill="#8aa0b3"></circle><circle cx="16.5" cy="44" r="1.6" fill="#8aa0b3"></circle><line x1="27" y1="24" x2="46" y2="24" stroke="#42566b" stroke-width="2.4" stroke-linecap="round"></line><line x1="27" y1="32" x2="46" y2="32" stroke="#42566b" stroke-width="2.4" stroke-linecap="round"></line><line x1="27" y1="40" x2="40" y2="40" stroke="#42566b" stroke-width="2.4" stroke-linecap="round"></line></svg>
+            <h1>Electronic Lab Notebook</h1>
+        </div>
+        <p style="margin-left: calc(34px + 0.8rem);">Data Explorer</p>
     </header>
     <nav class="nav">
-        <a href="/">Data Graph</a>
-        <a href="experiments.html">Experiments</a>
-        <a href="protocols.html">Protocols</a>
+        <a href="/">Data Explorer</a>
+        <a href="experiments.html">Experiment Catalog</a>
         <a href="reports.html">Reports</a>
-        <a href="presentations.html">Presentations</a>
-        <a href="documents.html">Documents</a>
+        <a href="protocols.html">Protocols</a>
         <a href="code.html">Code</a>
+        <a href="documents.html">Documents</a>
+        <a href="presentations.html">Presentations</a>
+        <a href="posters.html">Posters</a>
     </nav>
     <main class="shell">
         <section class="panel">

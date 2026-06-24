@@ -96,8 +96,11 @@ def generate_presentations(root, catalog_out=None):
 <body>
     <script src="auth.js"></script>
     <div class="header">
-        <h1>Presentations</h1>
-        <p>Slide decks and seminar talks</p>
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <svg width="34" height="34" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="12" y="8" width="40" height="48" rx="4" fill="#eef1f4"></rect><line x1="21" y1="8" x2="21" y2="56" stroke="#8aa0b3" stroke-width="1.6"></line><circle cx="16.5" cy="20" r="1.6" fill="#8aa0b3"></circle><circle cx="16.5" cy="32" r="1.6" fill="#8aa0b3"></circle><circle cx="16.5" cy="44" r="1.6" fill="#8aa0b3"></circle><line x1="27" y1="24" x2="46" y2="24" stroke="#42566b" stroke-width="2.4" stroke-linecap="round"></line><line x1="27" y1="32" x2="46" y2="32" stroke="#42566b" stroke-width="2.4" stroke-linecap="round"></line><line x1="27" y1="40" x2="40" y2="40" stroke="#42566b" stroke-width="2.4" stroke-linecap="round"></line></svg>
+            <h1>Electronic Lab Notebook</h1>
+        </div>
+        <p style="margin-left: calc(34px + 0.8rem);">Presentations</p>
     </div>
 
     {render_nav()}

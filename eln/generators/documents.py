@@ -118,7 +118,6 @@ def generate_documents(root, catalog_out=None, plugins=None):
         reports_html=documents_html,
         page_title="Documents",
         page_heading="Documents",
-        page_subtitle="Freeform notes and write-ups",
     )
 
     catalog_dir.mkdir(parents=True, exist_ok=True)

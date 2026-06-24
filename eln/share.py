@@ -32,6 +32,32 @@ _PRES_DECK = re.compile(r"^(presentations/[^/]+)/")
 _AUTH_JS = re.compile(r'[ \t]*<script src="auth\.js"></script>\n?')
 _NAV_BLOCK = re.compile(r'[ \t]*<div class="nav">.*?</div>\s*?\n?', re.DOTALL)
 
+# Brand assets (favicon + tab logo). Copied into every bundle so the tab icon
+# resolves offline; sourced from the code repo's catalog/ (same place the live
+# SDGL page comes from). The favicon <link>s use bundle-relative hrefs because
+# the catalog pages sit flat at the bundle root.
+_CATALOG_ASSETS = Path(__file__).resolve().parents[1] / "catalog"
+_BRAND_FILES = ("eln-logo.svg", "favicon-16.png", "favicon-32.png", "apple-touch-icon.png")
+_FAVICON_HEAD = (
+    '    <link rel="icon" type="image/svg+xml" href="eln-logo.svg">\n'
+    '    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">\n'
+    '    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">\n'
+    '    <link rel="apple-touch-icon" href="apple-touch-icon.png">\n'
+)
+
+
+def _copy_brand_assets(dest):
+    """Copy the favicon/logo set into the bundle root so the tab icon renders offline."""
+    for name in _BRAND_FILES:
+        src = _CATALOG_ASSETS / name
+        if src.is_file():
+            shutil.copy2(src, Path(dest) / name)
+
+
+def _add_favicon(html):
+    """Insert the bundle-relative favicon ``<link>``s just before ``</head>``."""
+    return html.replace("</head>", _FAVICON_HEAD + "</head>", 1)
+
 
 def _local_refs(html):
     """Return in-order local (copyable) ``src``/``href`` targets, query/fragment
@@ -48,11 +74,11 @@ def _local_refs(html):
 
 def _staticize(html):
     """Prepare a generated page for the static bundle: drop the server-only
-    ``auth.js`` script and repoint the dynamic ``/`` (Data Graph) nav link at the
+    ``auth.js`` script and repoint the dynamic ``/`` (Data Explorer) nav link at the
     bundle's static ``sdgl.html`` snapshot. Media links untouched."""
     html = _AUTH_JS.sub("", html)
-    html = html.replace('<a href="/">Data Graph</a>', '<a href="sdgl.html">Data Graph</a>')
-    return html
+    html = html.replace('<a href="/">Data Explorer</a>', '<a href="sdgl.html">Data Explorer</a>')
+    return _add_favicon(html)
 
 
 def _strip_nav(html):
@@ -86,7 +112,7 @@ _HTML_SUFFIXES = {".html", ".htm"}
 # missing assets.
 _CATALOG_PAGES = {"index.html", "experiments.html", "protocols.html",
                   "reports.html", "presentations.html", "documents.html",
-                  "sdgl.html"}
+                  "posters.html", "sdgl.html"}
 
 
 def _collect_assets(start_pages, root, dest, generated):
@@ -179,9 +205,13 @@ def export_all(root, dest):
     # 3. The bundle's front door is the static SDGL graph, mirroring the live app
     #    (which serves sdgl.html at /). Write the page + its data snapshot and
     #    redirect the bundle root to it. Mark them as known generated siblings so
-    #    the repointed Data Graph nav links resolve (not copied, not flagged).
+    #    the repointed Data Explorer nav links resolve (not copied, not flagged).
     _write_sdgl_snapshot(root, dest)
     generated.update({"sdgl.html", "index.html"})
+
+    # 3b. Drop the brand favicon/logo set in so the injected <link>s resolve
+    #     (copied before the walk, so they're never flagged missing).
+    _copy_brand_assets(dest)
 
     # 4. Transitively copy referenced assets.
     _seen, missing, _total = _collect_assets(start_pages, root, dest, generated)
@@ -201,14 +231,15 @@ _SDGL_SOURCE = Path(__file__).resolve().parents[1] / "catalog" / "sdgl.html"
 def _staticize_sdgl(html, snapshot):
     """Turn the live SDGL page into its static-bundle form: drop ``auth.js``, flip
     on static mode (so it reads the embedded snapshot instead of the API and hides
-    every mutating control), embed the data snapshot, and repoint its own Data Graph
+    every mutating control), embed the data snapshot, and repoint its own Data Explorer
     nav link at itself.
 
     The snapshot is embedded inline (not written as a sibling JSON the page fetches)
     so the bundle renders when opened straight from disk — browsers block ``fetch()``
     of sibling files under the ``file://`` protocol, which would leave the graph blank."""
     html = _AUTH_JS.sub("", html)
-    html = html.replace('<a href="/">Data Graph</a>', '<a href="sdgl.html">Data Graph</a>')
+    html = html.replace('<a href="/">Data Explorer</a>', '<a href="sdgl.html">Data Explorer</a>')
+    html = _add_favicon(html)
     # Escape ``</`` so the JSON can't close the <script> early. Set the flag + data
     # in <head>, before the page's main script runs.
     data = json.dumps(snapshot).replace("</", "<\\/")
@@ -249,6 +280,7 @@ def export_item(root, dest, kind, ident):
                                 output_name="index.html")
         html = _strip_nav(_staticize(Path(path).read_text()))
         Path(path).write_text(html)
+        _copy_brand_assets(dest)
         _seen, missing, _total = _collect_assets([("", html)], root, dest,
                                                  generated={"index.html"} | _CATALOG_PAGES)
     elif kind == "protocol":
@@ -259,6 +291,7 @@ def export_item(root, dest, kind, ident):
         if 'class="protocol-group"' not in html:
             raise ValueError(f"protocol not found: {ident}")
         Path(path).write_text(html)
+        _copy_brand_assets(dest)
         _seen, missing, _total = _collect_assets([("", html)], root, dest,
                                                  generated={"index.html"} | _CATALOG_PAGES)
     elif kind == "presentation":

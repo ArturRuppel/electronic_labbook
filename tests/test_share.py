@@ -105,15 +105,15 @@ def test_staticize_drops_auth_and_repoints_graph_link():
     html = (
         '<head>\n    <script src="auth.js"></script>\n</head>\n'
         '<div class="nav">\n'
-        '        <a href="/">Data Graph</a>\n'
-        '        <a href="experiments.html">Experiments</a>\n'
+        '        <a href="/">Data Explorer</a>\n'
+        '        <a href="experiments.html">Experiment Catalog</a>\n'
         '    </div>\n'
     )
     out = _staticize(html)
     assert "auth.js" not in out
     assert 'href="/"' not in out                       # dynamic root repointed
-    # The Data Graph nav link now points at the bundle's static SDGL snapshot.
-    assert '<a href="sdgl.html">Data Graph</a>' in out
+    # The Data Explorer nav link now points at the bundle's static SDGL snapshot.
+    assert '<a href="sdgl.html">Data Explorer</a>' in out
     assert 'href="experiments.html"' in out            # nav itself stays
 
 
@@ -189,8 +189,8 @@ def test_export_all_layout_and_staticized(data_root, tmp_path):
     assert 'href="/"' not in home and "auth.js" not in home
     assert "sdgl.html" in home                      # redirect target
     nav_page = (dest / "experiments.html").read_text()
-    assert '<a href="sdgl.html">Data Graph</a>' in nav_page  # repointed, not dropped
-    assert ">Experiments<" in nav_page             # nav otherwise intact
+    assert '<a href="sdgl.html">Data Explorer</a>' in nav_page  # repointed, not dropped
+    assert ">Experiment Catalog<" in nav_page       # nav otherwise intact
     deck = dest / "presentations" / "2025-05-01_Lab_meeting"
     assert (deck / "slides" / "1.png").is_file()
     assert (deck / "slides" / "2.png").is_file()   # data-background slide reaches bundle
@@ -209,7 +209,7 @@ def test_export_all_writes_static_sdgl_snapshot(data_root, tmp_path):
     page = (dest / "sdgl.html").read_text()
     assert "window.SDGL_STATIC = true" in page      # static mode on
     assert "auth.js" not in page                     # server-only script dropped
-    assert '<a href="sdgl.html">Data Graph</a>' in page  # own nav repointed
+    assert '<a href="sdgl.html">Data Explorer</a>' in page  # own nav repointed
     assert not (dest / "sdgl_data.json").exists()    # data is inline, not fetched
 
     embedded = re.search(r"window\.SDGL_DATA = (\{.*?\});</script>", page, re.S)
@@ -221,6 +221,33 @@ def test_export_all_writes_static_sdgl_snapshot(data_root, tmp_path):
 
     # Bundle is internally consistent: the repointed Data Graph links resolve.
     assert result["missing"] == []
+
+
+def test_export_all_bundles_brand_favicons(data_root, tmp_path):
+    from eln.share import export_all
+    dest = tmp_path / "bundle"
+    result = export_all(data_root, dest)
+    # Brand assets land in the bundle root so the tab icon resolves offline.
+    for asset in ["eln-logo.svg", "favicon-16.png", "favicon-32.png",
+                  "apple-touch-icon.png"]:
+        assert (dest / asset).is_file(), asset
+    # Catalog pages and the SDGL front door carry the favicon <link>s (relative).
+    for page in ["experiments.html", "reports.html", "sdgl.html"]:
+        head = (dest / page).read_text()
+        assert '<link rel="icon" type="image/svg+xml" href="eln-logo.svg">' in head, page
+        assert '<link rel="apple-touch-icon" href="apple-touch-icon.png">' in head, page
+    # The header carries the inline notebook logo next to the title.
+    assert 'viewBox="0 0 64 64"' in (dest / "experiments.html").read_text()
+    # Favicon refs resolve against the bundle, so nothing is flagged missing.
+    assert result["missing"] == []
+
+
+def test_export_item_report_bundles_favicons(data_root, tmp_path):
+    from eln.share import export_item
+    dest = tmp_path / "rep"
+    export_item(data_root, dest, "report", "reports/weekly/tfm_progress.md")
+    assert (dest / "eln-logo.svg").is_file()
+    assert '<link rel="apple-touch-icon"' in (dest / "index.html").read_text()
 
 
 def test_export_all_refuses_dest_inside_root(data_root):

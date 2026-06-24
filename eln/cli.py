@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -16,6 +18,38 @@ import webbrowser
 from eln.config import load_config
 from eln.db import DEFAULT_DB_NAME, DEFAULT_SQL_NAME
 from eln.db.rebuild_db import rebuild
+
+# Chromium-family browsers (in preference order) that support the ``--app=``
+# flag, which opens a chromeless standalone window instead of a normal tab.
+_APP_BROWSERS = (
+    "google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
+    "brave-browser", "microsoft-edge", "microsoft-edge-stable", "vivaldi",
+)
+
+
+def _app_window_command(url, which=shutil.which):
+    """Return an argv list that opens *url* as a standalone app window, or
+    ``None`` if no Chromium-family browser is installed. Pure/injectable so the
+    browser-selection logic is unit-testable without launching anything."""
+    for name in _APP_BROWSERS:
+        path = which(name)
+        if path:
+            return [path, f"--app={url}", "--new-window"]
+    return None
+
+
+def open_app_window(url):
+    """Open *url* in a standalone app window (so ``labbook admin`` behaves like a
+    desktop app), falling back to a normal browser tab if no Chromium-family
+    browser is available or the launch fails."""
+    cmd = _app_window_command(url)
+    if cmd:
+        try:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+        except OSError:
+            pass
+    webbrowser.open(url)
 
 
 def _load(args):
@@ -55,7 +89,7 @@ def cmd_admin(args):
     if args.scan:
         app.start_background_scan()
     if not args.no_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        threading.Timer(1.0, lambda: open_app_window(url)).start()
     app.run(debug=args.debug, port=args.port)
     return 0
 
@@ -189,7 +223,7 @@ def cmd_backup(args):
     print("Select experiments/files, then click Backup.")
     print("=" * 50)
     if not args.no_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        threading.Timer(1.0, lambda: open_app_window(url)).start()
     app.run(debug=False, port=args.port)
     return 0
 

@@ -188,6 +188,31 @@ def test_cli_stamp_uninferable_producer_errors(monkeypatch, tmp_path, capsys):
     assert "produced_by" in capsys.readouterr().err
 
 
+def test_app_window_command_prefers_chromium():
+    from eln.cli import _app_window_command
+
+    # which() finds only 'chromium' here.
+    which = lambda name: "/usr/bin/chromium" if name == "chromium" else None
+    cmd = _app_window_command("http://localhost:5000/", which=which)
+    assert cmd == ["/usr/bin/chromium", "--app=http://localhost:5000/", "--new-window"]
+
+
+def test_app_window_command_none_when_no_chromium():
+    from eln.cli import _app_window_command
+
+    assert _app_window_command("http://localhost:5000/", which=lambda name: None) is None
+
+
+def test_open_app_window_falls_back_to_browser_tab(monkeypatch):
+    import eln.cli as cli
+
+    monkeypatch.setattr(cli, "_app_window_command", lambda url: None)
+    opened = {}
+    monkeypatch.setattr(cli.webbrowser, "open", lambda url: opened.setdefault("url", url))
+    cli.open_app_window("http://localhost:5000/")
+    assert opened["url"] == "http://localhost:5000/"
+
+
 def test_backup_subcommand_parses(monkeypatch):
     import eln.cli as cli
     called = {}

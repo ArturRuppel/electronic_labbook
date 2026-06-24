@@ -619,6 +619,54 @@
         });
     };
 
+    // ---- poster form -------------------------------------------------------
+    // A poster is a title + an SVG already sitting in the data repo's posters/
+    // folder. The form picks both: a free-text title and a dropdown of the SVG
+    // files present. Saving writes the index and regenerates the page.
+
+    const POSTER_FORM_HTML =
+        '<h2>Add poster</h2>' +
+        '<form id="poster-form"><div class="form-grid">' +
+        '<div class="form-group full-width"><label for="poster-title">Title *</label>' +
+        '<input type="text" id="poster-title" required placeholder="e.g., EMBO workshop — cytoskeleton" /></div>' +
+        '<div class="form-group full-width"><label for="poster-file">SVG file *</label>' +
+        '<select id="poster-file" required></select>' +
+        '<small id="poster-file-hint" style="color:#6a7884;">Files in the data repo\'s <code>posters/</code> folder.</small></div>' +
+        '</div><div class="button-group"><button type="submit" class="button">Save Poster</button>' +
+        '<button type="button" class="button secondary" data-eln-cancel>Cancel</button></div></form>';
+
+    forms.openPosterForm = async function () {
+        const body = openModal(POSTER_FORM_HTML);
+        const select = body.querySelector('#poster-file');
+        const hint = body.querySelector('#poster-file-hint');
+        let files = [];
+        try {
+            const resp = await fetch(API + '/posters');
+            const data = await resp.json();
+            files = (data && data.files) || [];
+        } catch (e) { /* leave files empty → handled below */ }
+        if (files.length === 0) {
+            select.innerHTML = '<option value="">— no SVGs in posters/ —</option>';
+            select.disabled = true;
+            hint.textContent = 'Drop an .svg into the data repo\'s posters/ folder, then reopen this form.';
+        } else {
+            select.innerHTML = files.map(function (f) {
+                return '<option value="' + f + '">' + f + '</option>';
+            }).join('');
+        }
+        wireCancel(body);
+        body.querySelector('#poster-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const res = await postJSON('/posters', 'POST', {
+                title: body.querySelector('#poster-title').value.trim(),
+                file: select.value,
+            });
+            if (!res.ok || res.body.error) { alert((res.body && res.body.error) || 'Save failed'); return; }
+            closeModal();
+            await afterSave();
+        });
+    };
+
     // ---- shared: cancel button closes the modal ----------------------------
     function wireCancel(body) {
         const cancel = body.querySelector('[data-eln-cancel]');

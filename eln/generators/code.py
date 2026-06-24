@@ -196,7 +196,6 @@ def generate_code(root, catalog_out=None, plugins=None):
         reports_html=body,
         page_title="Code",
         page_heading="Code",
-        page_subtitle="Reusable analysis modules the report notebooks import",
     )
 
     catalog_dir.mkdir(parents=True, exist_ok=True)

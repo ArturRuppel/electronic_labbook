@@ -340,6 +340,121 @@ def test_forms_js_served_and_admin_js_gone(client):
     assert client.get("/admin.js").status_code == 404
 
 
+# --- PWA (installable standalone app) ---------------------------------------
+
+def test_manifest_served_as_standalone_pwa(client):
+    r = client.get("/manifest.webmanifest")
+    assert r.status_code == 200
+    assert "application/manifest+json" in r.headers["Content-Type"]
+    data = r.get_json(force=True)
+    assert data["display"] == "standalone"
+    assert data["start_url"] == "/"
+    srcs = {icon["src"] for icon in data["icons"]}
+    assert "/icon-192.png" in srcs and "/icon-512.png" in srcs
+
+
+def test_service_worker_served_with_fetch_handler(client):
+    r = client.get("/sw.js")
+    assert r.status_code == 200
+    assert "javascript" in r.headers["Content-Type"]
+    assert "addEventListener('fetch'" in r.get_data(as_text=True)
+
+
+def test_pwa_icons_served_as_png(client):
+    for variant in ("192", "512", "maskable-512"):
+        r = client.get(f"/icon-{variant}.png")
+        assert r.status_code == 200, variant
+        assert r.data[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_served_page_is_installable(client):
+    html = client.get("/").get_data(as_text=True)
+    assert '<link rel="manifest" href="/manifest.webmanifest">' in html
+    assert "navigator.serviceWorker.register('/sw.js')" in html
+    assert 'name="theme-color"' in html
+
+
+# --- brand favicon / logo ---------------------------------------------------
+
+def test_favicon_assets_served(client):
+    for path, sig in [("/favicon-16.png", b"\x89PNG"), ("/favicon-32.png", b"\x89PNG"),
+                      ("/favicon.ico", b"\x89PNG"), ("/apple-touch-icon.png", b"\x89PNG")]:
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert r.data[:4] == sig, path
+    for svg in ("/eln-logo.svg", "/eln-logo-16.svg"):
+        r = client.get(svg)
+        assert r.status_code == 200, svg
+        assert "image/svg+xml" in r.headers["Content-Type"], svg
+        assert "<svg" in r.get_data(as_text=True), svg
+
+
+def test_served_page_links_brand_favicon(client):
+    html = client.get("/").get_data(as_text=True)
+    assert '<link rel="icon" type="image/svg+xml" href="/eln-logo.svg">' in html
+    assert '<link rel="apple-touch-icon" href="/apple-touch-icon.png">' in html
+
+
+def test_sdgl_page_carries_inline_header_logo(client):
+    # The header shows the inline notebook logo, the brand title, and the
+    # page-specific name as a subtitle.
+    html = client.get("/").get_data(as_text=True)
+    assert 'viewBox="0 0 64 64"' in html
+    assert "<h1>Electronic Lab Notebook</h1>" in html
+    assert ">Data Explorer</p>" in html
+
+
+# --- posters ----------------------------------------------------------------
+
+def _add_svg(root, name):
+    posters = root / "posters"
+    posters.mkdir(exist_ok=True)
+    (posters / name).write_text('<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+
+
+def test_posters_list_add_and_remove(app_root):
+    root, app = app_root
+    client = app.test_client()
+    _add_svg(root, "talk.svg")
+
+    # The picker lists the SVG that's present; nothing curated yet.
+    listing = client.get("/api/posters").get_json()
+    assert listing["files"] == ["talk.svg"]
+    assert listing["posters"] == []
+
+    # Add an entry.
+    r = client.post("/api/posters", json={"title": "My Talk", "file": "talk.svg"})
+    assert r.status_code == 200 and r.get_json()["success"]
+    assert client.get("/api/posters").get_json()["posters"] == [
+        {"title": "My Talk", "file": "talk.svg"}
+    ]
+
+    # Remove it (file stays on disk, entry gone).
+    r = client.delete("/api/posters", json={"file": "talk.svg"})
+    assert r.status_code == 200
+    assert client.get("/api/posters").get_json()["posters"] == []
+    assert (root / "posters" / "talk.svg").exists()
+
+
+def test_posters_add_validates(app_root):
+    root, app = app_root
+    client = app.test_client()
+    _add_svg(root, "real.svg")
+    # Missing fields.
+    assert client.post("/api/posters", json={"title": "x"}).status_code == 400
+    # File not in the folder.
+    r = client.post("/api/posters", json={"title": "x", "file": "ghost.svg"})
+    assert r.status_code == 400
+
+
+def test_posters_svg_served_via_static_mount(app_root):
+    root, app = app_root
+    _add_svg(root, "deck.svg")
+    r = app.test_client().get("/posters/deck.svg")
+    assert r.status_code == 200
+    assert "<svg" in r.get_data(as_text=True)
+
+
 # --- documents CRUD ---------------------------------------------------------
 
 def test_documents_create_get_update_delete(client):

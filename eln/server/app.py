@@ -67,6 +67,24 @@ OVERLAY_SNIPPET = '''
 <script src="/edit-overlay.js"></script>
 '''
 
+# Injected into <head> so the local server is installable as a standalone PWA
+# (own window, desktop/launcher icon) rather than living in a browser tab.
+PWA_HEAD_SNIPPET = '''
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/eln-logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#263646">
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+  });
+}
+</script>
+'''
+
 _AUTH_SCRIPT_RE = re.compile(r'<script\s+src=["\']auth\.js["\']\s*>\s*</script>')
 
 
@@ -158,8 +176,10 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
         if not filepath.exists():
             return "Not found", 404
         html = filepath.read_text(encoding="utf-8")
-        # Strip auth.js (no password prompt locally) and inject the overlay.
+        # Strip auth.js (no password prompt locally), make the page installable as
+        # a PWA (head), and inject the edit overlay (body).
         html = _AUTH_SCRIPT_RE.sub("", html)
+        html = html.replace("</head>", PWA_HEAD_SNIPPET + "</head>", 1)
         html = html.replace("</body>", OVERLAY_SNIPPET + "</body>")
         return Response(html, mimetype="text/html")
 
@@ -189,6 +209,49 @@ def create_app(root, *, eln_db_path=None, sdgl_db_path=None, assets_dir=None,
     def serve_auth_js_noop():
         """Serve empty auth.js so any remaining references don't 404."""
         return Response("// auth disabled locally", mimetype="application/javascript")
+
+    # ---- PWA: manifest, service worker, icons (make the app installable) ----
+    @app.route("/manifest.webmanifest")
+    def serve_manifest():
+        return send_from_directory(
+            str(assets), "manifest.webmanifest",
+            mimetype="application/manifest+json",
+        )
+
+    @app.route("/sw.js")
+    def serve_service_worker():
+        # Root-scoped so it can control the whole app ("/").
+        return send_from_directory(
+            str(assets), "sw.js", mimetype="application/javascript",
+        )
+
+    @app.route("/icon-<variant>.png")
+    def serve_icon(variant):
+        # variant ∈ {192, 512, maskable-512}; send_from_directory rejects traversal.
+        return send_from_directory(str(assets), f"icon-{variant}.png")
+
+    # ---- brand favicon / logo (tab icon, Apple touch icon, in-app header) ----
+    @app.route("/favicon-<size>.png")
+    def serve_favicon_png(size):
+        # size ∈ {16, 32, 48, 64, 256}; send_from_directory rejects traversal.
+        return send_from_directory(str(assets), f"favicon-{size}.png")
+
+    @app.route("/favicon.ico")
+    def serve_favicon_ico():
+        # Browsers request /favicon.ico unprompted; hand them the 32px PNG.
+        return send_from_directory(str(assets), "favicon-32.png", mimetype="image/png")
+
+    @app.route("/apple-touch-icon.png")
+    def serve_apple_touch_icon():
+        return send_from_directory(str(assets), "apple-touch-icon.png")
+
+    @app.route("/eln-logo.svg")
+    def serve_logo_svg():
+        return send_from_directory(str(assets), "eln-logo.svg", mimetype="image/svg+xml")
+
+    @app.route("/eln-logo-16.svg")
+    def serve_logo_svg_small():
+        return send_from_directory(str(assets), "eln-logo-16.svg", mimetype="image/svg+xml")
 
     @app.route("/reports/<path:filepath>")
     def serve_report_asset(filepath):

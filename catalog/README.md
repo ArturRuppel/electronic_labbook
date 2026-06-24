@@ -9,6 +9,10 @@ the code:
   documents, reports) opened from the viewer's Edit/Add buttons.
 - `sdgl.html` — the Scientific Data Graph Layer, served at `/`; it is the
   notebook's home page.
+- `manifest.webmanifest`, `sw.js`, `icon-*.png` — PWA assets so `labbook admin`
+  is installable as a standalone desktop app (own window, launcher icon). The
+  server injects the manifest link + service-worker registration into every
+  served page's `<head>`.
 - shared CSS.
 
 The **generated** pages (`experiments.html`, `protocols.html`, `notebooks.html`,
