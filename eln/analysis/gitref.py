@@ -68,3 +68,37 @@ def repo_root(path):
 def remote_url(repo_dir):
     """Return the ``origin`` fetch URL of ``repo_dir``, or None if unset."""
     return _git(repo_dir, "config", "--get", "remote.origin.url") or None
+
+
+def file_history(repo_dir, path):
+    """Return ``[{sha, date, subject}, …]`` for commits that touched ``path``,
+    newest first. ``path`` is relative to ``repo_dir``. Returns ``[]`` outside a
+    repo, for an untracked path, or on any git error (mirrors ``_git``)."""
+    out = _git(
+        repo_dir,
+        "log", "--follow", "--format=%H%x1f%cI%x1f%s", "--", str(path),
+    )
+    if not out:
+        return []
+    history = []
+    for line in out.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) == 3:
+            history.append({"sha": parts[0], "date": parts[1], "subject": parts[2]})
+    return history
+
+
+def file_at_commit(repo_dir, sha, path):
+    """Return the exact text content of ``path`` as of commit ``sha`` (no
+    stripping, unlike :func:`_git`), or None if the blob is absent / git errors.
+    ``path`` is relative to ``repo_dir``."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_dir), "show", f"{sha}:{path}"],
+            capture_output=True, text=True,
+        )
+    except (OSError, ValueError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout

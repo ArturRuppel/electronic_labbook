@@ -2,7 +2,14 @@ import subprocess
 
 import pytest
 
-from eln.analysis.gitref import head_commit, path_dirty, remote_url, repo_root
+from eln.analysis.gitref import (
+    file_at_commit,
+    file_history,
+    head_commit,
+    path_dirty,
+    remote_url,
+    repo_root,
+)
 
 
 def _git(repo, *args):
@@ -78,3 +85,37 @@ def test_path_dirty_is_scoped_to_path(repo):
 
 def test_path_dirty_outside_repo_is_false(tmp_path):
     assert path_dirty(tmp_path, tmp_path / "nope.txt") is False
+
+
+@pytest.fixture
+def repo_two_versions(tmp_path):
+    r = tmp_path / "repo"
+    r.mkdir()
+    _git(r, "init", "-q")
+    _git(r, "config", "user.email", "t@t")
+    _git(r, "config", "user.name", "T")
+    f = r / "reports" / "r.md"
+    f.parent.mkdir()
+    f.write_text("v1\n")
+    _git(r, "add", "-A")
+    _git(r, "commit", "-q", "-m", "first")
+    f.write_text("v2\n")
+    _git(r, "add", "-A")
+    _git(r, "commit", "-q", "-m", "second")
+    return r
+
+
+def test_file_history_newest_first(repo_two_versions):
+    history = file_history(repo_two_versions, "reports/r.md")
+    assert [h["subject"] for h in history] == ["second", "first"]
+    assert all(len(h["sha"]) >= 7 and h["date"] for h in history)
+
+
+def test_file_at_commit_returns_old_content(repo_two_versions):
+    history = file_history(repo_two_versions, "reports/r.md")
+    oldest = history[-1]["sha"]
+    assert file_at_commit(repo_two_versions, oldest, "reports/r.md") == "v1\n"
+
+
+def test_file_history_untracked_is_empty(repo_two_versions):
+    assert file_history(repo_two_versions, "reports/nope.md") == []
