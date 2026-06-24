@@ -68,7 +68,7 @@ def generate_presentations(root, catalog_out=None):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Electronic Lab Notebook - Presentations</title>
+    <title>Presentations</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #27313a; background: #eef1f4; }}
@@ -96,7 +96,7 @@ def generate_presentations(root, catalog_out=None):
 <body>
     <script src="auth.js"></script>
     <div class="header">
-        <h1>Electronic Lab Notebook - Presentations</h1>
+        <h1>Presentations</h1>
         <p>Slide decks and seminar talks</p>
     </div>
 

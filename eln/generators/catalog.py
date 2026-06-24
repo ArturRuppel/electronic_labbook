@@ -69,7 +69,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Electronic Lab Notebook - Data Catalog</title>
+    <title>Data Catalog</title>
     <style>
         * {{
             margin: 0;
@@ -299,7 +299,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
     <script src="auth.js"></script>
     <div class="header">
-        <h1>Electronic Lab Notebook - Data Catalog</h1>
+        <h1>Data Catalog</h1>
         <p>Microscopy experiments and documentation</p>
     </div>
 
